@@ -12,12 +12,12 @@
  *   6. 智能 textarea 高度调整
  *   7. 页面隐藏 / 卸载时终止 Worker + 紧急保存
  *
- * 编码精简：
- *   beforeunload 中移除 GB18030 Worker 的终止逻辑（该 Worker 已下线）。
- *   仅保留对查找替换 Worker（highlightWorker）的终止。
+ * v8.1.0 变更：
+ *   语言切换由原来为 5 个 .lang-label 按钮绑定 click 事件，
+ *   改为为单个 #languageSelect 下拉框绑定 change 事件。
  *
- * 保留历史修复：
- *   - 大文件模式下手动开启高亮后立即 fullUpdate，刷新行号 / 光标 / 高亮层。
+ * 保留 v8.0.2 修复：
+ *   大文件模式下手动开启高亮后立即 fullUpdate，刷新行号 / 光标 / 高亮层。
  * ============================================================================
  */
 
@@ -124,7 +124,7 @@ export function updateIndentIndicator() {
     if (EditorState.indentCharacter === '\t') {
         DOM.indentIndicator.textContent = 'Tab';
     } else {
-        DOM.indentIndicator.textContent = EditorState.indentSize + '空格';
+        DOM.indentIndicator.textContent = EditorState.indentSize + ' 空格';
     }
     saveToLocalStorage(STORAGE_KEYS.INDENT, {
         size: EditorState.indentSize,
@@ -179,10 +179,10 @@ async function copyCode() {
         }
         DOM.copyIcon.style.display = 'none';
         DOM.checkIcon.style.display = 'inline-block';
-        DOM.copyText.textContent = '已复制!';
+        DOM.copyText.textContent = '已复制';
         DOM.btnCopy.style.background = 'var(--green-bg)';
         DOM.btnCopy.style.color = 'var(--green)';
-        DOM.btnCopy.style.borderColor = 'rgba(166,227,161,0.3)';
+        DOM.btnCopy.style.borderColor = 'var(--green)';
         showToast('✅ 代码已复制到剪贴板');
         if (EditorState.copyRestoreTimer) clearTimeout(EditorState.copyRestoreTimer);
         EditorState.copyRestoreTimer = setTimeout(function() {
@@ -505,12 +505,14 @@ export function setupUIEvents() {
     });
     // 查找替换
     DOM.btnToggleReplace.addEventListener('click', toggleReplaceModal);
-    // 语言标签
-    for (let i = 0; i < DOM.langLabels.length; i++) {
-        DOM.langLabels[i].addEventListener('click', function() {
-            switchLanguage(this.dataset.lang);
+
+    // 语言下拉框（v8.1.0：替代原 .lang-label 按钮循环）
+    if (DOM.langSelect) {
+        DOM.langSelect.addEventListener('change', function() {
+            switchLanguage(this.value);
         });
     }
+
     // 全局快捷键
     document.addEventListener('keydown', handleGlobalKeyDown);
     // 帮助弹窗

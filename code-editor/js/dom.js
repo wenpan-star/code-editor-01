@@ -2,16 +2,16 @@
  * ============================================================================
  * dom.js — DOM 元素引用集中收集
  * ============================================================================
- * 版本：v8.0.0
- * 更新日期：2026-09-11
  *
- * 重构说明：
- *   所有模块通过 `import { DOM } from './dom.js'` 获取元素引用。
- *   index.html 中 `<script type="module">` 默认延迟执行，
- *   因此本模块执行时 DOM 已完全可用。
+ * 所有模块通过 `import { DOM } from './dom.js'` 获取元素引用。
+ * index.html 中 `<script type="module">` 默认延迟执行，
+ * 因此本模块执行时 DOM 已完全可用。
  *
- *   注意：动态创建的元素（如 updateFileNameDisplay 中的 modifiedDot）
- *   需要在各模块使用处即时查询，不在此列。
+ * 说明：
+ *   - 语言选择由原来的 5 个 .lang-label 按钮改为单个 #languageSelect 下拉框，
+ *     因此移除 langLabels 引用，新增 langSelect 引用。
+ *   - 动态创建的元素（如 updateFileNameDisplay 中的 modifiedDot）
+ *     需要在各模块使用处即时查询，不在此列。
  * ============================================================================
  */
 
@@ -65,8 +65,8 @@ export const DOM = {
     autoSaveStatus: getById('autoSaveStatus'),
     fileNameDisplay: getById('fileNameDisplay'),
 
-    // ---- 语言标签 ----
-    langLabels: document.querySelectorAll('.lang-label'),
+    // ---- 语言下拉框（v8.1.0：替代原 langLabels） ----
+    langSelect: getById('languageSelect'),
 
     // ---- 查找替换弹窗 ----
     replaceModalOverlay: getById('replaceModalOverlay'),

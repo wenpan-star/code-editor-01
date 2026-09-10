@@ -14,17 +14,12 @@
  *   - THEME_SEQUENCE / THEME_ICONS：主题切换顺序与图标
  *   - MIME_TYPES / EXTENSION_LANGUAGE_MAP / VALID_TEXT_FILE_EXTENSION_REGEX
  *
- * 编码精简：
- *   ENCODING_DISPLAY_NAMES 从 8 种缩减为 4 种（删除 UTF-16 LE / UTF-16 BE /
- *   GB18030 / 西(1252/ISO-8859-1)）。若旧版本 localStorage 中保存了被删除
- *   的编码值，initializeEncodingSettings 会自动回退到 'auto'。
- *
  * 本模块只导出纯数据，无 DOM 依赖、无副作用，可被任意其他模块安全引入。
  * ============================================================================
  */
 
 export const CONFIG = Object.freeze({
-    APP_VERSION: '8.0.6',
+    APP_VERSION: '8.1.1',
 
     // ---- 大文件阈值 ----
     LARGE_FILE_THRESHOLD: 300 * 1024,

@@ -18,7 +18,12 @@
  * 循环依赖解除方案：search.js 中的 updateMatchCountDebounced 通过
  * setUpdateMatchCountCallback 注入，避免 editor-api.js ←→ search.js 循环。
  *
- * 本次修复：
+ * v8.1.0 变更：
+ *   switchLanguage 由原来循环遍历 .lang-label 按钮改为操作单个下拉框
+ *   DOM.langSelect。内部 language 值（js / html / css / python / java）
+ *   保持不变，LANGUAGE_DISPLAY_NAMES 保持不变。
+ *
+ * 保留 v8.0.4 修复：
  *   handleUndo / handleRedo 移除冗余的 fullUpdate() 调用。
  *   HistoryManager.undo / redo 内部已通过 onStateApplied 回调执行一次
  *   fullUpdate（见 main.js 中 historyManagerInstance 的构造参数），
@@ -26,11 +31,9 @@
  *   triggerAutoSave 与 toggleClearButton 保留，因为原本由
  *   handleEditorInput 提供，现已被 internalEditorUpdate 抑制。
  *
- *   行为完全不变：撤销 / 重做的刷新内容、自动保存触发、按钮状态均一致。
- *
- * 保留历史修复：
- *   - setEditorContent 主动派发 'input' 时用 internalEditorUpdate 抑制
- *     handleEditorInput 重复处理，并显式补齐 toggleClearButton()。
+ * 保留 v8.0.2 修复：
+ *   setEditorContent 主动派发 'input' 时用 internalEditorUpdate 抑制
+ *   handleEditorInput 重复处理，并显式补齐 toggleClearButton()。
  * ============================================================================
  */
 
@@ -332,7 +335,7 @@ export async function loadSavedCode() {
 export function handleUndo() {
     if (!historyManager) return;
     if (historyManager.undo(DOM.codeEditor)) {
-        // 本次修复：onStateApplied（在 historyManager.undo 内部被调用）已经
+        // onStateApplied（在 historyManager.undo 内部被调用）已经
         // 执行过 fullUpdate，此处不再重复调用。
         // 原由 handleEditorInput 提供的 triggerAutoSave / toggleClearButton
         // 因 internalEditorUpdate 抑制而不会被调用，需显式补齐。
@@ -361,13 +364,15 @@ export function updateUndoRedoState() {
 export function switchLanguage(language) {
     EditorState.currentLanguage = language;
     saveToLocalStorage(STORAGE_KEYS.LANGUAGE, language);
-    for (let i = 0; i < DOM.langLabels.length; i++) {
-        const label = DOM.langLabels[i];
-        const isActive = label.dataset.lang === language;
-        label.classList.toggle('active', isActive);
-        label.setAttribute('aria-pressed', isActive);
+
+    // v8.1.0：语言选择改为单个下拉框，直接同步 value。
+    if (DOM.langSelect) {
+        DOM.langSelect.value = language;
     }
+
+    // 状态栏显示全称（如 JavaScript）
     DOM.langDisplay.textContent = LANGUAGE_DISPLAY_NAMES[language] || language;
+
     scheduleHighlightUpdate();
     updateRunButtonState();
     if (language !== 'java' && EditorState.outputPanelOpen && !EditorState.isRunning) {

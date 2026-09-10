@@ -5,21 +5,26 @@
  *
  * 本模块从 v7.7.0 单文件主脚本顶部提取，保留全部常量定义：
  *   - CONFIG：应用版本、大文件阈值、历史记录限制、自动保存延迟、
- *             搜索超时、GB18030 映射构建超时、Java 运行超时、Toast 时长
+ *             搜索超时、Java 运行超时、Toast 时长
  *   - STORAGE_KEYS：全部 localStorage 存储键
  *   - INDEXED_DB / DIR_HANDLE_DB：IndexedDB 数据库配置
  *   - LANGUAGE_DISPLAY_NAMES / LANGUAGE_EXTENSIONS：语言映射
- *   - ENCODING_DISPLAY_NAMES：编码显示名称
+ *   - ENCODING_DISPLAY_NAMES：编码显示名称（仅保留 4 种）
  *   - DEFAULT_CODE_BY_LANGUAGE：各语言默认代码模板
  *   - THEME_SEQUENCE / THEME_ICONS：主题切换顺序与图标
  *   - MIME_TYPES / EXTENSION_LANGUAGE_MAP / VALID_TEXT_FILE_EXTENSION_REGEX
+ *
+ * 编码精简：
+ *   ENCODING_DISPLAY_NAMES 从 8 种缩减为 4 种（删除 UTF-16 LE / UTF-16 BE /
+ *   GB18030 / 西(1252/ISO-8859-1)）。若旧版本 localStorage 中保存了被删除
+ *   的编码值，initializeEncodingSettings 会自动回退到 'auto'。
  *
  * 本模块只导出纯数据，无 DOM 依赖、无副作用，可被任意其他模块安全引入。
  * ============================================================================
  */
 
 export const CONFIG = Object.freeze({
-    APP_VERSION: '8.0.5',
+    APP_VERSION: '8.0.6',
 
     // ---- 大文件阈值 ----
     LARGE_FILE_THRESHOLD: 300 * 1024,
@@ -38,7 +43,6 @@ export const CONFIG = Object.freeze({
     // ---- 搜索 ----
     SEARCH_TIMEOUT_MS: 200,
     SEARCH_TIMEOUT_GRACE_MS: 100,
-    GB18030_MAP_BUILD_TIMEOUT_MS: 10000,
 
     // ---- 匹配计数防抖 ----
     // 统一由 search.js 的 updateMatchCountDebounced 使用，
@@ -111,11 +115,7 @@ export const ENCODING_DISPLAY_NAMES = Object.freeze({
     'auto': '自动检测',
     'utf-8': 'UTF-8',
     'utf-8-bom': 'UTF-8 BOM',
-    'utf-16le': 'UTF-16 LE',
-    'utf-16be': 'UTF-16 BE',
-    'gb18030': 'GB18030',
-    'windows-1252': 'ANSI (1252)',
-    'iso-8859-1': '西(1252/ISO-8859-1)'
+    'windows-1252': 'ANSI (1252)'
 });
 
 export const DEFAULT_CODE_BY_LANGUAGE = Object.freeze({

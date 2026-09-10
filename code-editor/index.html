@@ -3,42 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
-    <title>在线代码编辑器 · 专业版 v8.0.5</title>
+    <title>在线代码编辑器 · 专业版 v8.0.6</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23f5a623' rx='20'/%3E%3Cpath d='M35,40 L48,50 L35,60' stroke='%232d2d2d' fill='none' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M55,65 L70,35' stroke='%232d2d2d' stroke-width='5' stroke-linecap='round'/%3E%3Cpath d='M65,40 L52,50 L65,60' stroke='%232d2d2d' fill='none' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
     <!--
     ================================================================================
      在线代码编辑器 · 专业版
 
-     本版修复 v8.0.4 审核中发现的一个功能回归：
+     本版移除 4 种编码及其相关功能，精简编码支持范围：
 
-       ★ editor.js：补回 #codeEditor 元素上丢失的 scroll 事件监听器。
-         该监听器在 v8.0.0 的模块化迁移中被遗漏，导致鼠标滚轮 / 拖动
-         滚动条时行号列和 Shadow DOM 高亮层无法同步滚动；进一步地，
-         在长文件中滚动后输入字符，行号列会被 updateLineNumbers 重置
-         回顶部。修复后滚动行为与 v7.7.0 完全一致。
+       移除的编码：
+           - UTF-16 LE
+           - UTF-16 BE
+           - GB18030（含 Web Worker 映射表构建、异步编解码等全部逻辑）
+           - 西(1252/ISO-8859-1)
 
-     保留 v8.0.4 及更早版本的全部修复：
+       保留的编码：
+           - 自动检测（auto）
+           - UTF-8
+           - UTF-8 BOM
+           - ANSI (1252)  —— Windows-1252
+
+       影响范围：
+         - index.html 编码下拉框选项由 8 个缩减为 4 个
+         - encoding.js 移除 UTF-16 手写编解码、GB18030 Worker、ISO-8859-1 相关函数
+         - file-io.js 移除 GB18030 下载分支
+         - main.js 移除 GB18030 映射表预构建
+         - state.js 移除 gb18030* 状态字段
+         - ui.js 移除 beforeunload 中 GB18030 Worker 终止逻辑
+         - config.js 的 ENCODING_DISPLAY_NAMES 相应缩减
+
+       兼容性：
+         - 旧版本保存在 localStorage 中被移除的编码值，会在初始化时
+           自动回退到 'auto'（自动检测）。
+         - 若运行时传入被移除的编码，编码函数会安全降级为 UTF-8。
+
+     保留 v8.0.5 及更早版本的全部修复：
+       - editor.js 补回 #codeEditor 的 scroll 监听器（行号 + 高亮同步滚动）
        - editor.js 三处 setRangeText 用 internalEditorUpdate 抑制重复触发
        - editor-api.js handleUndo / handleRedo 移除冗余 fullUpdate
        - history.js 撤销 / 重做路径的 internalEditorUpdate 抑制
-       - encoding.js GB18030 Promise 复位（finally 统一处理）
-       - editor.js 六处 setEditorContent 光标参数化
        - main.js saveToLocalStorage 导入
        - highlight.js 行高计算修正
        - search.js 匹配计数防抖统一（updateMatchCountDebounced）
        - search.js Worker try/catch + requestId 回传
        - editor-api.js setEditorContent 内部更新标志
        - ui.js 大文件开启高亮后立即 fullUpdate
-       - encoding.js 异步路径定时器清理
        - java-runner.js timeoutId 放入 finally 清理
        - css/styles.css 从 v7.7.0 内联样式提取，与模块化代码契约对齐
 
      保留全部特性（v8.0.0 / v7.7.0）：
        - 20 个 ES Module 文件模块化架构
-       - Web Worker 超时终止重建 / GB18030 Worker 超时重建
+       - Web Worker 超时终止重建（用于查找替换搜索）
        - UTF-8 有效性检测 / 大文件历史 30 步限制
        - Java 版本选择 / 正则安全增强 / ARIA 改进
-       - 5 语言高亮 / 8 编码 / Shadow DOM 高亮层 / 折叠 / 查找替换
+       - 5 语言高亮 / Shadow DOM 高亮层 / 折叠 / 查找替换
        - IndexedDB + localStorage 双层自动保存 / 紧急保存
        - 4 主题 / 字体缩放 / 自动换行 / 缩进切换 / 全部快捷键
 
@@ -66,11 +84,7 @@
                         <option value="auto">自动检测</option>
                         <option value="utf-8">UTF-8</option>
                         <option value="utf-8-bom">UTF-8 BOM</option>
-                        <option value="utf-16le">UTF-16 LE</option>
-                        <option value="utf-16be">UTF-16 BE</option>
-                        <option value="gb18030">GB18030</option>
                         <option value="windows-1252">ANSI (1252)</option>
-                        <option value="iso-8859-1">西(1252/ISO-8859-1)</option>
                     </select>
                     <span class="encoding-select-arrow">▼</span>
                 </div>

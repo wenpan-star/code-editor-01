@@ -2,10 +2,8 @@
  * ============================================================================
  * ui.js — 主 UI 事件
  * ============================================================================
- * 版本：v8.0.2（深度审核修复版）
- * 更新日期：2026-09-11
  *
- * 重构说明：
+ * 本模块职责：
  *   1. 主题切换 / 字体缩放 / 自动换行 / 缩进设置
  *   2. 帮助弹窗 / 大文件弹窗
  *   3. 全局快捷键（Ctrl +/-/0/F/H/G/S/T/Enter/Shift+C，Ctrl+Z/Y）
@@ -14,11 +12,12 @@
  *   6. 智能 textarea 高度调整
  *   7. 页面隐藏 / 卸载时终止 Worker + 紧急保存
  *
- * v8.0.2 修复（问题 6）：
- *   大文件模式下手动开启高亮（状态栏点击 / 大文件弹窗按钮）后，
- *   行号列原本仍显示"大文件"提示，需等到下次输入触发 fullUpdate 才刷新。
- *   本版在两处分支中补上 fullUpdate() 调用，立即刷新行号、光标位置、
- *   高亮层等，保证状态一致性。
+ * 编码精简：
+ *   beforeunload 中移除 GB18030 Worker 的终止逻辑（该 Worker 已下线）。
+ *   仅保留对查找替换 Worker（highlightWorker）的终止。
+ *
+ * 保留历史修复：
+ *   - 大文件模式下手动开启高亮后立即 fullUpdate，刷新行号 / 光标 / 高亮层。
  * ============================================================================
  */
 
@@ -43,7 +42,6 @@ import {
     switchLanguage,
     setEditorContent,
     updateFileNameDisplay,
-    // v8.0.2 新增导入：用于大文件手动开启高亮后立即刷新 UI。
     fullUpdate
 } from './editor-api.js';
 import {
@@ -230,8 +228,7 @@ function handleHighlightStatusClick() {
         EditorState.largeFileActive = false;
         if (historyManager) historyManager.setLargeFileMode(false);
         setHighlightEnabled(newState, false);
-        // v8.0.2 修复（问题 6）：立即刷新行号 / 光标 / 高亮层，
-        // 避免行号列停留在"大文件"提示。
+        // 立即刷新行号 / 光标 / 高亮层，避免行号列停留在"大文件"提示。
         fullUpdate();
         showToast('高亮已开启');
         return;
@@ -249,7 +246,7 @@ function bindLargeFileModalEvents() {
         if (historyManager) historyManager.setLargeFileMode(false);
         setHighlightEnabled(true, false);
         DOM.largeFileModal.classList.remove('open');
-        // v8.0.2 修复（问题 6）：立即刷新行号 / 光标 / 高亮层。
+        // 立即刷新行号 / 光标 / 高亮层。
         fullUpdate();
         showToast('已手动开启高亮，编辑大型文件时请注意性能');
     });
@@ -403,13 +400,10 @@ function bindPageLifecycleEvents() {
         if (document.visibilityState === 'hidden') emergencySave();
     });
     window.addEventListener('beforeunload', function(event) {
+        // 终止查找替换 Worker（若存在）。
         if (EditorState.highlightWorker) {
             EditorState.highlightWorker.terminate();
             EditorState.highlightWorker = null;
-        }
-        if (EditorState.gb18030MapWorker) {
-            EditorState.gb18030MapWorker.terminate();
-            EditorState.gb18030MapWorker = null;
         }
         emergencySave();
         if (EditorState.codeModified) {

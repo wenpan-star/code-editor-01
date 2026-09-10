@@ -2,21 +2,21 @@
  * ============================================================================
  * state.js — 全局状态对象
  * ============================================================================
- * 版本：v8.0.2（深度审核修复版）
- * 更新日期：2026-09-11
  *
- * 重构说明：
- *   本模块从 v7.7.0 单文件主脚本提取 EditorState，保持字段与含义完全一致。
- *   所有跨模块共享的可变状态集中于此。
+ * 本模块从 v7.7.0 单文件主脚本提取 EditorState，保持字段与含义完全一致。
+ * 所有跨模块共享的可变状态集中于此。
  *
- * v8.0.2 新增字段：
+ * 字段说明：
  *   - internalEditorUpdate：内部代码驱动的编辑器更新标志。
  *     当 setEditorContent 或 HistoryManager.applyState 主动派发 'input' 事件
  *     时，会临时置为 true，editor.js 的 handleEditorInput 检测到该标志后
  *     直接返回，避免 debouncedUpdate / triggerAutoSave 被重复触发导致
- *     fullUpdate 双调用（这是 v8.0.1 审核报告问题 5 的核心）。
+ *     fullUpdate 双调用。
+ *     该字段为内部瞬态标志，不持久化，不参与任何 UI 展示。
  *
- *   该字段为内部瞬态标志，不持久化，不参与任何 UI 展示。
+ * 编码精简：
+ *   移除 gb18030EncodingMap / gb18030EncodingMapPromise / gb18030MapBuilding /
+ *   gb18030MapWorker 四个字段（GB18030 编码及其 Worker 支持已下线）。
  * ============================================================================
  */
 
@@ -70,7 +70,7 @@ export const EditorState = {
     // ---- 数据库 ----
     autoSaveDB: null,
 
-    // ---- Worker ----
+    // ---- Worker（查找替换搜索）----
     highlightWorker: null,
     highlightShadowRoot: null,
     highlightPreElement: null,
@@ -89,10 +89,6 @@ export const EditorState = {
     // ---- 编码 ----
     currentEncoding: 'auto',
     currentFileEncoding: 'auto',
-    gb18030EncodingMap: null,
-    gb18030EncodingMapPromise: null,
-    gb18030MapBuilding: false,
-    gb18030MapWorker: null,
 
     // ---- 文件名 ----
     currentFileName: '在线代码编辑器',
@@ -100,7 +96,7 @@ export const EditorState = {
     // ---- Java 版本 ----
     javaVersion: '21.0.2',
 
-    // ---- v8.0.2 新增：内部编辑器更新标志 ----
+    // ---- 内部编辑器更新标志 ----
     // 由 editor-api.js 的 setEditorContent 与 history.js 的 dispatchEditorUpdate
     // 在主动派发 'input' 事件前后置位 / 复位。editor.js 的 handleEditorInput
     // 检测到该标志时直接返回，避免内部驱动的更新与显式 fullUpdate 叠加，

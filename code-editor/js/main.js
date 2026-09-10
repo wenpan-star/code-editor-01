@@ -2,8 +2,6 @@
  * ============================================================================
  * main.js — 启动引导 + 初始化
  * ============================================================================
- * 版本：v8.0.2（深度审核修复版）
- * 更新日期：2026-09-11
  *
  * 职责：
  *   1. 创建 HistoryManager 并注入回调
@@ -11,26 +9,21 @@
  *   3. 加载所有持久化设置
  *   4. 尝试恢复上次编辑内容
  *   5. 创建 Shadow DOM 高亮层
- *   6. 创建搜索 Worker
+ *   6. 创建搜索 Worker（用于查找替换）
  *   7. 绑定所有事件
  *   8. 注入循环依赖回调（updateMatchCountDebounced）
  *   9. 设置高亮调度器
- *   10. 后台预构建 GB18030 映射表
- *   11. 聚焦编辑器
+ *   10. 聚焦编辑器
  *
- * v8.0.2 修复：
- *   ★ 问题 1（严重）：补上 saveToLocalStorage 导入。
- *     v8.0.1 中 bindJavaVersionSelectEvent 使用了 saveToLocalStorage 但未导入，
- *     切换 Java 版本会抛 ReferenceError。本版修正为：
- *       import { loadFromLocalStorage, saveToLocalStorage, escapeHtml } from './util.js';
+ * 编码精简：
+ *   移除 GB18030 映射表预构建步骤与 getGB18030EncodingMap 的导入。
+ *   搜索 Worker 与 Shadow DOM 高亮层不受影响。
  *
- *   ★ 问题 3：注入给 editor-api.js 的回调由 updateMatchCount 改为
- *     updateMatchCountDebounced，使 fullUpdate 触发的匹配计数也走 150ms 防抖，
- *     与 editor.js 的输入路径统一，避免双重 Worker 请求。
- *
- * 保留 v8.0.1 全部修复：
- *   ★ 问题 1（escapeHtml 统一）：performHighlightRender 不再内联定义 escapeHtml。
- *   ★ 问题 5：performHighlightRender 不再重复调用 updateLineNumbers / updateCursorPosition。
+ * 保留历史修复：
+ *   - saveToLocalStorage 导入（用于 Java 版本切换）
+ *   - 注入 updateMatchCountDebounced（使 fullUpdate 触发的匹配计数也走防抖）
+ *   - performHighlightRender 不再内联定义 escapeHtml
+ *   - performHighlightRender 不再重复调用 updateLineNumbers / updateCursorPosition
  * ============================================================================
  */
 
@@ -43,7 +36,6 @@ import {
 } from './config.js';
 import { DOM } from './dom.js';
 import { showToast } from './toast.js';
-// v8.0.2 修复（问题 1）：必须导入 saveToLocalStorage（bindJavaVersionSelectEvent 使用）。
 import { loadFromLocalStorage, saveToLocalStorage, escapeHtml } from './util.js';
 import { HistoryManager, setHistoryManager } from './history.js';
 import {
@@ -73,15 +65,13 @@ import {
 import {
     createHighlightWorker,
     getMatchRangesAsync,
-    // v8.0.2 修复（问题 3）：注入的是防抖版本。
     updateMatchCountDebounced,
     bindReplaceModalEvents,
     restoreReplaceInputs
 } from './search.js';
 import {
     initializeEncodingSettings,
-    bindEncodingSelectEvents,
-    getGB18030EncodingMap
+    bindEncodingSelectEvents
 } from './encoding.js';
 import { setupEditorEvents } from './editor.js';
 import { setupLineNumberClickHandler } from './folding.js';
@@ -115,7 +105,6 @@ function initializeJavaVersion() {
 function bindJavaVersionSelectEvent() {
     DOM.javaVersionSelect.addEventListener('change', function() {
         EditorState.javaVersion = this.value;
-        // v8.0.2 修复（问题 1）：saveToLocalStorage 已在顶部导入。
         saveToLocalStorage(STORAGE_KEYS.JAVA_VERSION, this.value);
         showToast('Java 版本已切换为 ' + this.value);
     });
@@ -128,12 +117,10 @@ function bindJavaVersionSelectEvent() {
  * 回调负责：计算搜索/括号范围、调用 buildHighlightHTML 生成 HTML、
  *           更新 Shadow DOM 高亮层。
  *
- * v8.0.1 修复（问题 1、5）：
- *   - 不再内联定义 escapeHtml，改用 util.js 的统一实现。
- *   - 不再在此处调用 updateLineNumbers / updateCursorPosition，
+ * 注意：
+ *   - 不内联定义 escapeHtml，改用 util.js 的统一实现。
+ *   - 不在此处调用 updateLineNumbers / updateCursorPosition，
  *     因为它们已由 fullUpdate 同步调用过。
- *
- * v8.0.2：未在此函数中新增逻辑，仅继承 v8.0.1 的修复。
  */
 function performHighlightRender() {
     if (EditorState.largeFileActive) {
@@ -215,7 +202,7 @@ async function initialize() {
     historyManagerInstance.pushState(DOM.codeEditor);
 
     // ---- 2. 注入循环依赖回调 ----
-    // v8.0.2 修复（问题 3）：注入防抖版本，使 fullUpdate 触发的匹配计数也走防抖。
+    // 注入防抖版本，使 fullUpdate 触发的匹配计数也走防抖。
     setUpdateMatchCountCallback(updateMatchCountDebounced);
 
     // ---- 3. 设置高亮调度器 ----
@@ -319,19 +306,8 @@ async function initialize() {
     DOM.codeEditor.focus();
     updateUndoRedoState();
 
-    // ---- 20. 后台预构建 GB18030 映射表 ----
-    setTimeout(function() {
-        getGB18030EncodingMap().then(function(encodingMap) {
-            if (encodingMap) {
-                console.log('%c📄 GB18030 编码映射表已预构建就绪', 'color:#89b4fa;');
-            }
-        }).catch(function(mapError) {
-            console.warn('GB18030 编码映射表构建异常', mapError.message);
-        });
-    }, 500);
-
     console.log(
-        '%c🚀 专业版编辑器 v' + CONFIG.APP_VERSION + ' 已就绪（深度审核修复版 · 单文件 → 多文件模块化重构）',
+        '%c🚀 专业版编辑器 v' + CONFIG.APP_VERSION + ' 已就绪（编码精简版 · 单文件 → 多文件模块化重构）',
         'color:#a3be8c;font-weight:bold;'
     );
 }

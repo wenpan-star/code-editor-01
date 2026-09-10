@@ -2,14 +2,25 @@
  * ============================================================================
  * file-io.js — 文件导入 / 下载 / 拖拽
  * ============================================================================
- * 版本：v8.0.0
- * 更新日期：2026-09-11
  *
- * 重构说明：
+ * 本模块职责：
  *   1. 导入：读取 ArrayBuffer → BOM 检测 → UTF-8 有效性检测 → 解码 → 设置内容
- *   2. 导出：编码文本（含 GB18030）→ 优先写入已选目录（File System Access API）
+ *   2. 导出：编码文本 → 优先写入已选目录（File System Access API）
  *           → 否则触发浏览器下载
  *   3. 拖拽：监听 editorWrapper 的 dragover / drop
+ *
+ * 编码精简：
+ *   移除下载流程中的 GB18030 特殊分支（含 getGB18030EncodingMap /
+ *   encodeTextToGB18030WithMap 的导入与调用）。下载时统一走
+ *   encodeTextToBytes，支持 utf-8 / utf-8-bom / windows-1252。
+ *
+ * 依赖：
+ *   - state.js / config.js / dom.js / toast.js / util.js
+ *   - editor-api.js（setEditorContent / switchLanguage / updateFileNameDisplay）
+ *   - encoding.js（detectBOMEncoding / isValidUTF8 / decodeTextFromBytes /
+ *                  encodeTextToBytes / updateEncodingDisplay /
+ *                  updateEncodingStatusOnly）
+ *   - storage.js（目录句柄相关）
  * ============================================================================
  */
 
@@ -31,8 +42,6 @@ import {
     isValidUTF8,
     decodeTextFromBytes,
     encodeTextToBytes,
-    getGB18030EncodingMap,
-    encodeTextToGB18030WithMap,
     updateEncodingDisplay,
     updateEncodingStatusOnly
 } from './encoding.js';
@@ -70,7 +79,7 @@ function loadFileIntoEditor(file) {
             showToast('📂 检测到编码: ' + ENCODING_DISPLAY_NAMES[finalEncoding]);
         } else if (finalEncoding === 'auto') {
             if (!isValidUTF8(arrayBuffer)) {
-                showToast('⚠️ 字节流不是有效的 UTF-8，可能是其他编码（如 GB18030/Windows-1252），请手动选择', true);
+                showToast('⚠️ 字节流不是有效的 UTF-8，可能是其他编码（如 Windows-1252），请手动选择', true);
                 finalEncoding = 'utf-8';
                 updateEncodingStatusOnly(finalEncoding);
             } else {
@@ -148,23 +157,9 @@ async function handleDownloadClick() {
         showToast('当前为自动检测，导出使用 UTF-8');
     }
 
-    let encodedBytes;
-    if (exportEncoding === 'gb18030') {
-        try {
-            const encodingMap = await getGB18030EncodingMap();
-            if (!encodingMap) {
-                showToast('❌ GB18030 编码表构建失败，请重试', true);
-                return;
-            }
-            encodedBytes = encodeTextToGB18030WithMap(currentCode, encodingMap);
-        } catch (mapError) {
-            console.error('GB18030 编码失败:', mapError);
-            showToast('❌ GB18030 编码失败，请重试', true);
-            return;
-        }
-    } else {
-        encodedBytes = encodeTextToBytes(currentCode, exportEncoding);
-    }
+    // 统一走 encodeTextToBytes，内部支持 utf-8 / utf-8-bom / windows-1252。
+    // 若 exportEncoding 为已移除的编码，会安全降级为 UTF-8。
+    const encodedBytes = encodeTextToBytes(currentCode, exportEncoding);
 
     // ---- 优先使用 File System Access API ----
     if (window.showDirectoryPicker) {

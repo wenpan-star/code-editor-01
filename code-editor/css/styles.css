@@ -1,0 +1,1213 @@
+﻿/* ============================================================================
+ * styles.css — 在线代码编辑器 · 专业版
+ * ============================================================================
+ *
+ * 本文件从 v7.7.0 单文件版内联 <style> 提取，并针对 v8.0.4 模块化版本做以下调整：
+ *
+ *   1. 移除 .highlight-layer 及其全部子类样式（.kw / .str / .num / .cmt /
+ *      .fn / .tag / .attr / .prop / .op / .punc / .annot / .type /
+ *      .search-match / .bracket-match / .wrap-enabled）。
+ *
+ *      原因：v8.0.x 的语法高亮层改用 Shadow DOM（见 highlight.js 中的
+ *      setupShadowHighlightLayer），Shadow DOM 内部的样式无法被外部 CSS
+ *      穿透，这些样式已在 highlight.js 内部通过 <style> 内联定义。
+ *
+ *   2. 原 `#codeEditor, .highlight-layer { ... }` 合并选择器拆分为仅
+ *      `#codeEditor { ... }`。textarea 的 padding、font-size、line-height、
+ *      font-family、letter-spacing、tab-size 必须与 Shadow DOM 内的
+ *      pre 保持一致，否则滚动同步（syncShadowScroll）与光标定位
+ *      （scrollToCursor / buildHighlightHTML）会出现视觉偏移。
+ *
+ *   3. 其他全部样式（4 主题、工具栏、按钮、查找替换弹窗、输出面板、
+ *      状态栏、Toast、Modal、响应式）保持与 v7.7.0 完全一致，无任何降级。
+ *
+ *   4. Shadow DOM 使用的 CSS 变量（--hl-kw / --hl-str / ... / --line-highlight-bg
+ *      等）必须在本文件的 :root 及各 [data-theme] 下定义，highlight.js 的
+ *      syncShadowCSSVariables() 会把它们从 document.documentElement 拷贝到
+ *      Shadow Host 上。
+ * ============================================================================ */
+
+/* ========== CSS 变量（暗色主题默认） ========== */
+:root {
+    --bg: #1a1b26;
+    --surface: #1f2030;
+    --surface-light: #292a3a;
+    --text: #cdd6f4;
+    --text-secondary: #9aa0b0;
+    --accent: #7aa2f7;
+    --accent-hover: #5d8bf4;
+    --green: #a3be8c;
+    --green-bg: rgba(163, 190, 140, 0.15);
+    --red: #f38ba8;
+    --border: #3b3d54;
+    --shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    --editor-font: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+    --editor-font-size: 14px;
+    --editor-line-height: 1.7;
+    --selection-bg: rgba(255, 220, 0, 0.35);
+    --caret-color: #f5c542;
+    --hl-kw: #cba6f7;
+    --hl-str: #a6e3a1;
+    --hl-num: #fab387;
+    --hl-cmt: #6c7086;
+    --hl-fn: #89b4fa;
+    --hl-tag: #89b4fa;
+    --hl-attr: #a6e3a1;
+    --hl-prop: #89dceb;
+    --hl-op: #89dceb;
+    --hl-punc: #bac2de;
+    --hl-annot: #f9e2af;
+    --hl-type: #94e2d5;
+    --hl-search-bg: rgba(255, 215, 0, 0.35);
+    --hl-bracket-bg: rgba(255, 255, 255, 0.25);
+    --scrollbar-thumb: #45475a;
+    --scrollbar-thumb-hover: #585b70;
+    --toast-bg: var(--green-bg);
+    --toast-color: var(--green);
+    --line-highlight-bg: rgba(255, 255, 255, 0.04);
+    --fold-color: #6c7086;
+    --output-bg: #11121d;
+    --output-text: #cdd6f4;
+    --output-stderr: #f38ba8;
+    --output-success: #a3be8c;
+    --output-border: #3b3d54;
+}
+
+[data-theme="light"] {
+    --bg: #f4f5f7;
+    --surface: #ebedf0;
+    --surface-light: #e2e4e8;
+    --text: #1e1e2e;
+    --text-secondary: #555;
+    --accent: #3b6ef0;
+    --accent-hover: #2b5cd6;
+    --green: #1c7a3e;
+    --green-bg: rgba(28, 122, 62, 0.12);
+    --red: #c5221f;
+    --border: #d0d3d8;
+    --shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    --selection-bg: rgba(255, 200, 0, 0.3);
+    --caret-color: #e8a800;
+    --hl-kw: #7c3aed;
+    --hl-str: #059669;
+    --hl-num: #d97706;
+    --hl-cmt: #9ca3af;
+    --hl-fn: #2563eb;
+    --hl-tag: #2563eb;
+    --hl-attr: #059669;
+    --hl-prop: #0e7490;
+    --hl-op: #0e7490;
+    --hl-punc: #6b7280;
+    --hl-annot: #b45309;
+    --hl-type: #0d9488;
+    --hl-search-bg: rgba(250, 204, 21, 0.45);
+    --hl-bracket-bg: rgba(0, 0, 0, 0.12);
+    --scrollbar-thumb: #c4c4c4;
+    --scrollbar-thumb-hover: #a8a8a8;
+    --line-highlight-bg: rgba(0, 0, 0, 0.03);
+    --output-bg: #f0ede6;
+    --output-text: #3d3a35;
+    --output-stderr: #c5221f;
+    --output-success: #1c7a3e;
+    --output-border: #d0d3d8;
+}
+
+[data-theme="ink"] {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface-light: #334155;
+    --text: #e2e8f0;
+    --text-secondary: #94a3b8;
+    --accent: #38bdf8;
+    --accent-hover: #0ea5e9;
+    --green: #4ade80;
+    --green-bg: rgba(74, 222, 128, 0.15);
+    --red: #fb7185;
+    --border: #334155;
+    --shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    --selection-bg: rgba(56, 189, 248, 0.3);
+    --caret-color: #38bdf8;
+    --hl-kw: #c084fc;
+    --hl-str: #86efac;
+    --hl-num: #fbbf24;
+    --hl-cmt: #64748b;
+    --hl-fn: #7dd3fc;
+    --hl-tag: #7dd3fc;
+    --hl-attr: #86efac;
+    --hl-prop: #67e8f9;
+    --hl-op: #67e8f9;
+    --hl-punc: #cbd5e1;
+    --hl-annot: #fde68a;
+    --hl-type: #5eead4;
+    --hl-search-bg: rgba(250, 204, 21, 0.45);
+    --hl-bracket-bg: rgba(255, 255, 255, 0.2);
+    --scrollbar-thumb: #475569;
+    --scrollbar-thumb-hover: #64748b;
+    --line-highlight-bg: rgba(255, 255, 255, 0.04);
+    --output-bg: #020617;
+    --output-text: #e2e8f0;
+    --output-stderr: #fb7185;
+    --output-success: #4ade80;
+    --output-border: #334155;
+}
+
+[data-theme="cream"] {
+    --bg: #faf8f5;
+    --surface: #f0ede6;
+    --surface-light: #e6e1d9;
+    --text: #3d3a35;
+    --text-secondary: #6b6560;
+    --accent: #9b6b3d;
+    --accent-hover: #7e552e;
+    --green: #4b7a3b;
+    --green-bg: rgba(75, 122, 59, 0.1);
+    --red: #b5453a;
+    --border: #d6cfc4;
+    --shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+    --selection-bg: rgba(155, 107, 61, 0.15);
+    --caret-color: #9b6b3d;
+    --hl-kw: #8b5c3a;
+    --hl-str: #4a7c3f;
+    --hl-num: #c07a32;
+    --hl-cmt: #a39a8c;
+    --hl-fn: #6d8a5e;
+    --hl-tag: #6d8a5e;
+    --hl-attr: #4a7c3f;
+    --hl-prop: #5f8c7a;
+    --hl-op: #5f8c7a;
+    --hl-punc: #8a8074;
+    --hl-annot: #b45309;
+    --hl-type: #0d9488;
+    --hl-search-bg: rgba(200, 160, 40, 0.3);
+    --hl-bracket-bg: rgba(0, 0, 0, 0.08);
+    --scrollbar-thumb: #c4bdb2;
+    --scrollbar-thumb-hover: #a89f92;
+    --line-highlight-bg: rgba(0, 0, 0, 0.03);
+    --output-bg: #f0ede6;
+    --output-text: #3d3a35;
+    --output-stderr: #b5453a;
+    --output-success: #4b7a3b;
+    --output-border: #d6cfc4;
+}
+
+/* ========== 基础重置 ========== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: #0d0e17;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    transition: background 0.3s;
+}
+
+[data-theme="light"] body {
+    background: #e5e7eb;
+}
+
+[data-theme="ink"] body {
+    background: #020617;
+}
+
+[data-theme="cream"] body {
+    background: #e8e3d8;
+}
+
+.container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    transition: background 0.3s;
+    box-shadow: inset 0 0 0 1px var(--border);
+}
+
+/* ========== 工具栏 ========== */
+.toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+    flex-wrap: wrap;
+    transition: background 0.3s;
+    backdrop-filter: blur(10px);
+}
+
+.toolbar-left,
+.toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.toolbar-right {
+    flex-wrap: wrap;
+}
+
+.dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.dot-red {
+    background: #f38ba8;
+}
+
+.dot-yellow {
+    background: #fab387;
+}
+
+.dot-green {
+    background: #a6e3a1;
+}
+
+.file-name {
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    margin-left: 6px;
+    letter-spacing: 0.2px;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.modified-dot {
+    display: none;
+    width: 7px;
+    height: 7px;
+    background: var(--accent);
+    border-radius: 50%;
+    margin-left: 2px;
+    animation: modifiedPulse 1.2s infinite;
+}
+
+@keyframes modifiedPulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.4;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+/* ========== 按钮通用样式 ========== */
+.lang-label,
+.btn {
+    font-family: inherit;
+    letter-spacing: 0.2px;
+    user-select: none;
+    transition: all var(--transition);
+    cursor: pointer;
+    outline: none;
+    border: 1px solid transparent;
+}
+
+.lang-label {
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--surface-light);
+    padding: 4px 10px;
+    border-radius: 18px;
+}
+
+.lang-label:hover {
+    border-color: var(--border);
+    color: var(--text);
+}
+
+.lang-label.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(137, 180, 250, 0.08);
+    box-shadow: 0 0 8px rgba(137, 180, 250, 0.2);
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 6px 12px;
+    border-radius: 18px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    background: transparent;
+    color: var(--text);
+    line-height: 1;
+    min-width: 32px;
+}
+
+.btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.btn:disabled {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+.btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(137, 180, 250, 0.3);
+}
+
+.btn-primary:active:not(:disabled) {
+    transform: scale(0.96);
+}
+
+.btn-secondary {
+    background: var(--surface-light);
+    color: var(--text);
+    border-color: var(--border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: #3e405e;
+    border-color: #5a5a78;
+    transform: translateY(-1px);
+}
+
+.btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    border-color: transparent;
+    padding: 6px 8px;
+}
+
+.btn-ghost:hover:not(:disabled) {
+    background: var(--surface-light);
+    color: var(--text);
+}
+
+.btn svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.btn-run {
+    background: #e67e22;
+    color: #fff;
+    border-color: #e67e22;
+}
+
+.btn-run:hover:not(:disabled) {
+    background: #d35400;
+    border-color: #d35400;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(230, 126, 34, 0.35);
+}
+
+.btn-run.running {
+    animation: runPulse 1s infinite;
+}
+
+@keyframes runPulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(230, 126, 34, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(230, 126, 34, 0);
+    }
+}
+
+/* ========== 编码选择下拉框 ========== */
+.encoding-select-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.encoding-select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background: var(--surface-light);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 28px 5px 12px;
+    border-radius: 18px;
+    cursor: pointer;
+    outline: none;
+    transition: all var(--transition);
+    letter-spacing: 0.3px;
+    line-height: 1.4;
+    max-width: 140px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.encoding-select:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.encoding-select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 8px rgba(137, 180, 250, 0.2);
+}
+
+.encoding-select option {
+    background: var(--surface);
+    color: var(--text);
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+.encoding-select-arrow {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    font-size: 9px;
+    color: var(--text-secondary);
+}
+
+/* ========== Java 版本选择下拉框 ========== */
+.java-version-select-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.java-version-select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background: var(--surface-light);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 4px 20px 4px 8px;
+    border-radius: 14px;
+    cursor: pointer;
+    outline: none;
+    transition: all var(--transition);
+}
+
+.java-version-select:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.java-version-select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 6px rgba(137, 180, 250, 0.2);
+}
+
+.java-version-select option {
+    background: var(--surface);
+    color: var(--text);
+    font-size: 11px;
+}
+
+.java-version-arrow {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    font-size: 7px;
+    color: var(--text-secondary);
+}
+
+/* ========== 查找替换弹窗 ========== */
+.replace-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(2px);
+}
+
+.replace-modal-overlay.open {
+    display: flex;
+}
+
+.replace-modal {
+    background: var(--bg);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    width: 620px;
+    max-width: 92vw;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+    position: relative;
+}
+
+.replace-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    cursor: move;
+    user-select: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.replace-modal-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.replace-modal-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 0 4px;
+    line-height: 1;
+}
+
+.replace-modal-body {
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.replace-row {
+    display: flex;
+    gap: 12px;
+}
+
+.replace-field {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.replace-field label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.replace-field textarea {
+    background: var(--surface-light);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-family: var(--editor-font);
+    outline: none;
+    resize: vertical;
+    min-height: 2.8em;
+    max-height: 120px;
+    overflow-y: auto;
+    transition: border-color var(--transition);
+    line-height: 1.5;
+}
+
+.replace-field textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.2);
+}
+
+.replace-options {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.replace-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.match-count {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-right: auto;
+}
+
+.resize-handle {
+    position: absolute;
+    z-index: 10;
+}
+
+.resize-handle-right {
+    top: 0;
+    right: 0;
+    width: 6px;
+    height: 100%;
+    cursor: ew-resize;
+}
+
+.resize-handle-bottom {
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 6px;
+    cursor: ns-resize;
+}
+
+.resize-handle-corner {
+    right: 0;
+    bottom: 0;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+}
+
+.resizable-field {
+    position: relative;
+}
+
+.resize-handle-textarea {
+    position: absolute;
+    bottom: 2px;
+    right: 8px;
+    width: 12px;
+    height: 12px;
+    background: var(--text-secondary);
+    cursor: ns-resize;
+    border-radius: 2px;
+    z-index: 5;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.resize-handle-textarea:hover {
+    opacity: 1;
+    background: var(--accent);
+}
+
+.resize-handle-textarea::after {
+    content: "⤨";
+    font-size: 10px;
+    position: absolute;
+    top: -2px;
+    left: 1px;
+    color: inherit;
+    transform: rotate(90deg);
+    pointer-events: none;
+}
+
+/* ========== 编辑器区域 ========== */
+.editor-wrapper {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    background: var(--bg);
+    transition: background 0.3s;
+}
+
+.line-numbers {
+    flex-shrink: 0;
+    width: 50px;
+    background: var(--surface);
+    padding: 12px 0;
+    overflow: hidden;
+    user-select: none;
+    text-align: right;
+    font-family: var(--editor-font);
+    font-size: var(--editor-font-size);
+    line-height: var(--editor-line-height);
+    color: #5a5d78;
+    border-right: 1px solid var(--border);
+    pointer-events: auto;
+    transition: background 0.3s;
+    position: relative;
+}
+
+.line-numbers span {
+    display: block;
+    padding-right: 12px;
+    cursor: pointer;
+    position: relative;
+}
+
+.line-numbers .line-container {
+    position: relative;
+}
+
+.line-numbers .fold-marker {
+    position: absolute;
+    left: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: auto;
+    height: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--fold-color);
+    font-size: 10px;
+    cursor: pointer;
+    opacity: 0.6;
+    white-space: nowrap;
+    visibility: visible;
+}
+
+.line-numbers .line-container:hover .fold-marker {
+    opacity: 1;
+}
+
+.code-area {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+}
+
+/* v8.0.x 调整：拆分为仅 #codeEditor。
+   Shadow DOM 内的 pre 样式由 highlight.js 内联定义，
+   此处仅需保证 textarea 自身字体 / 行高 / padding 与 Shadow DOM pre 一致。 */
+#codeEditor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    padding: 12px 18px;
+    font-family: var(--editor-font);
+    font-size: var(--editor-font-size);
+    line-height: var(--editor-line-height);
+    tab-size: 4;
+    -moz-tab-size: 4;
+    white-space: pre;
+    overflow-wrap: normal;
+    word-wrap: normal;
+    overflow-x: auto;
+    overflow-y: scroll;
+    letter-spacing: 0;
+    box-sizing: border-box;
+    z-index: 2;
+    caret-color: var(--caret-color);
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+}
+
+#codeEditor::selection {
+    background: var(--selection-bg);
+}
+
+#codeEditor::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+#codeEditor::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#codeEditor::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 10px;
+}
+
+#codeEditor::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+}
+
+/* ========== 状态栏 ========== */
+.status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-secondary);
+    letter-spacing: 0.2px;
+    user-select: none;
+    flex-wrap: wrap;
+    gap: 10px;
+    transition: background 0.3s;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: default;
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.3;
+    }
+}
+
+.indent-indicator {
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--surface-light);
+    font-weight: 600;
+    transition: background 0.2s;
+    font-size: 10px;
+}
+
+.indent-indicator:hover {
+    background: var(--border);
+}
+
+.highlight-indicator {
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--surface-light);
+    font-weight: 600;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.highlight-indicator:hover {
+    background: var(--border);
+}
+
+.encoding-indicator {
+    cursor: default;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--surface-light);
+    font-weight: 600;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ========== Toast 提示 ========== */
+.toast {
+    position: fixed;
+    top: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-120px);
+    background: var(--toast-bg);
+    color: var(--toast-color);
+    padding: 10px 20px;
+    border-radius: 24px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: all 0.35s cubic-bezier(0.22, 0.61, 0.36, 1);
+    border: 1px solid rgba(166, 227, 161, 0.3);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    white-space: nowrap;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.toast.error {
+    background: rgba(243, 139, 168, 0.15);
+    color: var(--red);
+    border-color: rgba(243, 139, 168, 0.35);
+}
+
+/* ========== 弹窗遮罩 ========== */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-overlay.open {
+    display: flex;
+}
+
+.modal {
+    background: var(--bg);
+    border-radius: var(--radius);
+    padding: 24px;
+    max-width: 480px;
+    width: 90%;
+    color: var(--text);
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+}
+
+.modal h2 {
+    margin-bottom: 16px;
+    font-size: 18px;
+}
+
+.modal kbd {
+    background: var(--surface-light);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: var(--editor-font);
+    font-size: 11px;
+    margin: 0 4px;
+}
+
+.modal .shortcut-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+.modal .close-btn {
+    margin-top: 16px;
+}
+
+.modal .button-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+/* ========== 输出面板 ========== */
+.output-panel {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--border);
+    background: var(--output-bg);
+    transition: background 0.3s, max-height 0.3s ease;
+    max-height: 0;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.output-panel.open {
+    max-height: 280px;
+}
+
+.output-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    min-height: 36px;
+}
+
+.output-panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.output-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.output-status {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-right: 4px;
+}
+
+.output-panel-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    gap: 8px;
+    padding: 8px 12px;
+}
+
+.stdin-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.stdin-section label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.stdin-section textarea {
+    background: var(--surface-light);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: var(--editor-font);
+    outline: none;
+    resize: vertical;
+    min-height: 2em;
+    max-height: 80px;
+    line-height: 1.5;
+    transition: border-color var(--transition);
+}
+
+.stdin-section textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.15);
+}
+
+.output-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    background: var(--output-bg);
+    border: 1px solid var(--output-border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: var(--editor-font);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--output-text);
+    white-space: pre-wrap;
+    word-break: break-all;
+    transition: background 0.3s, border-color 0.3s;
+}
+
+.output-content .stdout-line {
+    color: var(--output-text);
+}
+
+.output-content .stderr-line {
+    color: var(--output-stderr);
+}
+
+.output-content .success-line {
+    color: var(--output-success);
+}
+
+.output-content .info-line {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.output-placeholder {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* ========== 响应式设计 ========== */
+@media (max-width: 640px) {
+    .toolbar {
+        padding: 6px 12px;
+    }
+    .btn {
+        padding: 5px 10px;
+        font-size: 11px;
+    }
+    .line-numbers {
+        width: 38px;
+        font-size: 11px;
+    }
+    #codeEditor {
+        font-size: 12px;
+        padding: 10px 12px;
+    }
+    .replace-row {
+        flex-direction: column;
+    }
+    .output-panel.open {
+        max-height: 200px;
+    }
+    .encoding-select {
+        max-width: 100px;
+        font-size: 9px;
+        padding: 3px 20px 3px 6px;
+    }
+    .encoding-select-arrow {
+        right: 6px;
+        font-size: 7px;
+    }
+    .java-version-select {
+        font-size: 9px;
+        padding: 3px 16px 3px 6px;
+        max-width: 70px;
+    }
+}

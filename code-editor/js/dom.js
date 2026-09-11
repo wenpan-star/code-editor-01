@@ -7,11 +7,12 @@
  * index.html 中 `<script type="module">` 默认延迟执行，
  * 因此本模块执行时 DOM 已完全可用。
  *
- * 说明：
- *   - 语言选择由原来的 5 个 .lang-label 按钮改为单个 #languageSelect 下拉框，
- *     因此移除 langLabels 引用，新增 langSelect 引用。
- *   - 动态创建的元素（如 updateFileNameDisplay 中的 modifiedDot）
- *     需要在各模块使用处即时查询，不在此列。
+ * v8.3.0 新增：
+ *   DOM.fileExtensionDropdown：后缀输入框下方的历史下拉列表容器。
+ *     若运行的是旧版 index.html（无此元素），此处取值为 null，
+ *     相关模块使用处已做好空值防御。
+ *
+ * 依赖：index.html 中元素的 id 必须与此处保持一致。
  * ============================================================================
  */
 
@@ -65,8 +66,13 @@ export const DOM = {
     autoSaveStatus: getById('autoSaveStatus'),
     fileNameDisplay: getById('fileNameDisplay'),
 
-    // ---- 语言下拉框（v8.1.0：替代原 langLabels） ----
+    // ---- 语言下拉框 ----
     langSelect: getById('languageSelect'),
+
+    // ---- 自定义文件后缀输入框及历史下拉列表 ----
+    fileExtensionInput: getById('fileExtensionInput'),
+    // v8.3.0 新增：历史下拉列表容器
+    fileExtensionDropdown: getById('fileExtensionDropdown'),
 
     // ---- 查找替换弹窗 ----
     replaceModalOverlay: getById('replaceModalOverlay'),

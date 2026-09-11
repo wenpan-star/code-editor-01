@@ -13,25 +13,10 @@
  *   7. 绑定所有事件
  *   8. 注入循环依赖回调（updateMatchCountDebounced）
  *   9. 设置高亮调度器
- *   10. 聚焦编辑器
+ *   10. 初始化自定义文件后缀输入框
+ *   11. 聚焦编辑器
  *
- * v8.1.1 修复：
- *   语言恢复后显式调用 scheduleHighlightUpdate()。
- *   原实现中，第 14 步 fullUpdate 触发的 scheduleHighlightUpdate
- *   会通过 requestAnimationFrame 排队，而 rAF 在下一帧才执行，此时
- *   EditorState.currentLanguage 已被第 15 步改写 —— 实际上工作正常，
- *   但依赖了 rAF 的异步性，不够明确。本版显式调用一次
- *   scheduleHighlightUpdate()，语义更清晰。
- *
- * 保留 v8.1.0 变更：
- *   语言选择由原来的 5 个 .lang-label 按钮改为单个 #languageSelect
- *   下拉框，恢复语言状态时直接设置 DOM.langSelect.value。
- *
- * 保留 v8.0.2 修复：
- *   - saveToLocalStorage 导入（用于 Java 版本切换）
- *   - 注入 updateMatchCountDebounced（使 fullUpdate 触发的匹配计数也走防抖）
- *   - performHighlightRender 不再内联定义 escapeHtml
- *   - performHighlightRender 不再重复调用 updateLineNumbers / updateCursorPosition
+ * 本版仅更新启动日志版本号，其余流程保持不变。
  * ============================================================================
  */
 
@@ -69,7 +54,6 @@ import {
     syncShadowScroll,
     findMatchingBracket,
     updateHighlightStatusIndicator,
-    // v8.1.1：新增导入，用于语言恢复后显式刷新高亮。
     scheduleHighlightUpdate
 } from './highlight.js';
 import {
@@ -88,7 +72,8 @@ import { setupLineNumberClickHandler } from './folding.js';
 import {
     bindImportEvents,
     bindDragAndDropEvents,
-    bindDownloadEvents
+    bindDownloadEvents,
+    initializeFileExtensionInput
 } from './file-io.js';
 import {
     bindOutputEvents,
@@ -126,11 +111,6 @@ function bindJavaVersionSelectEvent() {
  * 由 main.js 注入到 highlight.js 的调度回调。
  * 回调负责：计算搜索/括号范围、调用 buildHighlightHTML 生成 HTML、
  *           更新 Shadow DOM 高亮层。
- *
- * 注意：
- *   - 不内联定义 escapeHtml，改用 util.js 的统一实现。
- *   - 不在此处调用 updateLineNumbers / updateCursorPosition，
- *     因为它们已由 fullUpdate 同步调用过。
  */
 function performHighlightRender() {
     if (EditorState.largeFileActive) {
@@ -280,7 +260,6 @@ async function initialize() {
     toggleClearButton();
 
     // ---- 15. 恢复语言状态 ----
-    // 语言选择改为单个下拉框，直接设置 value。
     const savedLanguage = loadFromLocalStorage(STORAGE_KEYS.LANGUAGE, 'js');
     EditorState.currentLanguage = savedLanguage;
     if (DOM.langSelect) {
@@ -288,8 +267,14 @@ async function initialize() {
     }
     DOM.langDisplay.textContent = LANGUAGE_DISPLAY_NAMES[savedLanguage] || savedLanguage;
 
-    // v8.1.1：语言恢复后显式刷新高亮，不再依赖第 14 步 rAF 的异步性。
+    // 语言恢复后显式刷新高亮，不再依赖第 14 步 rAF 的异步性。
     scheduleHighlightUpdate();
+
+    // ---- 15.1 初始化自定义文件后缀输入框 ----
+    // 必须在语言恢复之后执行，使占位符正确反映当前语言的默认后缀。
+    // 同时完成：从 localStorage 恢复上次保存的后缀、绑定输入事件。
+    // 本函数带幂等保护，重复调用无副作用。
+    initializeFileExtensionInput();
 
     // ---- 16. 更新运行按钮状态 ----
     updateRunButtonState();
@@ -318,7 +303,7 @@ async function initialize() {
     updateUndoRedoState();
 
     console.log(
-        '%c🚀 专业版编辑器 v' + CONFIG.APP_VERSION + ' 已就绪（细节修复版 · 单文件 → 多文件模块化重构）',
+        '%c🚀 专业版编辑器 v' + CONFIG.APP_VERSION + ' 已就绪（自定义文件后缀下拉 + 幂等保护 + Escape 语义修正）',
         'color:#3fb950;font-weight:bold;'
     );
 }

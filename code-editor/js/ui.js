@@ -12,12 +12,10 @@
  *   6. 智能 textarea 高度调整
  *   7. 页面隐藏 / 卸载时终止 Worker + 紧急保存
  *
- * v8.1.0 变更：
- *   语言切换由原来为 5 个 .lang-label 按钮绑定 click 事件，
- *   改为为单个 #languageSelect 下拉框绑定 change 事件。
- *
- * 保留 v8.0.2 修复：
- *   大文件模式下手动开启高亮后立即 fullUpdate，刷新行号 / 光标 / 高亮层。
+ * v8.2.0 变更：
+ *   语言下拉框的 change 事件在调用 switchLanguage 之后，
+ *   额外调用 updateFileExtensionPlaceholder()，
+ *   使「自定义文件后缀」输入框的占位符同步反映当前语言的默认后缀。
  * ============================================================================
  */
 
@@ -54,6 +52,8 @@ import { scrollToCursor, updateCursorPosition } from './line-numbers.js';
 import { toggleReplaceModal, openReplaceModal } from './search.js';
 import { runJavaCode } from './java-runner.js';
 import { historyManager } from './history.js';
+// v8.2.0：新增导入，用于在语言切换后同步自定义后缀输入框的提示
+import { updateFileExtensionPlaceholder } from './file-io.js';
 
 // ==================== 主题 ====================
 
@@ -228,7 +228,6 @@ function handleHighlightStatusClick() {
         EditorState.largeFileActive = false;
         if (historyManager) historyManager.setLargeFileMode(false);
         setHighlightEnabled(newState, false);
-        // 立即刷新行号 / 光标 / 高亮层，避免行号列停留在"大文件"提示。
         fullUpdate();
         showToast('高亮已开启');
         return;
@@ -246,7 +245,6 @@ function bindLargeFileModalEvents() {
         if (historyManager) historyManager.setLargeFileMode(false);
         setHighlightEnabled(true, false);
         DOM.largeFileModal.classList.remove('open');
-        // 立即刷新行号 / 光标 / 高亮层。
         fullUpdate();
         showToast('已手动开启高亮，编辑大型文件时请注意性能');
     });
@@ -400,7 +398,6 @@ function bindPageLifecycleEvents() {
         if (document.visibilityState === 'hidden') emergencySave();
     });
     window.addEventListener('beforeunload', function(event) {
-        // 终止查找替换 Worker（若存在）。
         if (EditorState.highlightWorker) {
             EditorState.highlightWorker.terminate();
             EditorState.highlightWorker = null;
@@ -507,9 +504,11 @@ export function setupUIEvents() {
     DOM.btnToggleReplace.addEventListener('click', toggleReplaceModal);
 
     // 语言下拉框（v8.1.0：替代原 .lang-label 按钮循环）
+    // v8.2.0：切换语言后同步自定义后缀输入框的占位符与提示文本
     if (DOM.langSelect) {
         DOM.langSelect.addEventListener('change', function() {
             switchLanguage(this.value);
+            updateFileExtensionPlaceholder();
         });
     }
 

@@ -3,72 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
-    <title>在线代码编辑器 · 专业版 v8.1.1</title>
+    <title>在线代码编辑器 · 专业版 v8.3.1</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23f5a623' rx='20'/%3E%3Cpath d='M35,40 L48,50 L35,60' stroke='%232d2d2d' fill='none' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M55,65 L70,35' stroke='%232d2d2d' stroke-width='5' stroke-linecap='round'/%3E%3Cpath d='M65,40 L52,50 L65,60' stroke='%232d2d2d' fill='none' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
     <!--
     ================================================================================
-     在线代码编辑器 · 专业版
+     在线代码编辑器 · 专业版 v8.3.1
 
-     本版在 v8.1.0 视觉重构基础上，修复 6 处细节问题：
+     【本次更新说明】
+       1. initializeFileExtensionInput 增加幂等保护标志，重复调用时直接返回，
+          避免全局 mousedown 监听器被重复注册。
+       2. Escape 语义修正：按 Escape 不再把当前值写入历史（符合"取消"语义），
+          通过 suppressNextBlurHistory 标志抑制紧随其后的 blur 事件中的历史写入。
+       3. 输入时保留下拉，按输入值过滤显示（小写包含匹配）。
+          过滤后为空则隐藏下拉；focus / click 显示全部，input 按输入过滤。
 
-       1. 状态栏文案统一（去掉冒号）：
-          - line-numbers.js 中 5 处文案由"行: 1"改为"行 1"，与 index.html
-            的初始文案（"行 0"）保持一致，消除用户输入第一个字符时
-            "行 0 → 行: 1"的视觉跳变。
-
-       2. 输出面板清空状态语义修正：
-          - 点击"清空输出"按钮后，状态由"就绪"改为"未运行"，
-            更准确地反映"尚未运行过任何代码"的事实。
-
-       3. CSS 变量 --space-2 未定义 → 直接使用 8px 值。
-          原 .toolbar 使用 gap: var(--space-2, 8px)，但 --space-2
-          从未定义，虽然 fallback 生效但属于半成品代码。
-
-       4. *:focus-visible 的 border-radius 修复：
-          原规则给所有焦点元素强制加圆角，会改变 textarea / checkbox
-          等无圆角元素的外观。移除该属性，元素自身圆角由其样式决定。
-
-       5. .status-bar 改用 min-height 防溢出：
-          桌面宽度下状态栏条目较多时 flex-wrap 会换行，原 height: 28px
-          固定高度会导致内容被裁切。改为 min-height: 28px; height: auto。
-
-       6. #btnClearOutput 内联样式移入 CSS：
-          原按钮用 style="height:24px;padding:0 8px;font-size:11px;"
-          覆盖 .btn 默认样式，改为在 styles.css 中定义
-          .output-panel-header .btn 样式规则。
-
-     保留 v8.1.0 视觉重构成果：
-       - Dark：中性灰底 + 靛蓝主色（GitHub Dark / Linear 风格）
-       - Light / Ink / Cream 同步精炼
-       - 字体阶梯 11/12/13/14px，间距统一为 4 的倍数
-       - 按钮高度 32px，圆角 6px
-       - 3 类下拉框（语言 / 编码 / Java 版本）样式完全统一
-       - 顶栏按钮按功能分组加分隔符
-       - 移除 macOS 三色圆点
-       - 语言标签合并为单个下拉框
-
-     保留 v8.0.7 及更早版本的全部修复与特性：
-       - 编码仅支持 auto / utf-8 / utf-8-bom / windows-1252
-       - editor.js 补回 #codeEditor 的 scroll 监听器
-       - editor.js 三处 setRangeText 用 internalEditorUpdate 抑制重复触发
-       - editor-api.js handleUndo / handleRedo 移除冗余 fullUpdate
-       - history.js 撤销 / 重做路径的 internalEditorUpdate 抑制
-       - main.js saveToLocalStorage 导入
-       - highlight.js 行高计算修正
-       - search.js 匹配计数防抖统一（updateMatchCountDebounced）
-       - search.js Worker try/catch + requestId 回传
-       - editor-api.js setEditorContent 内部更新标志
-       - ui.js 大文件开启高亮后立即 fullUpdate
-       - java-runner.js timeoutId 放入 finally 清理
-
-     保留全部特性（v8.0.0 / v7.7.0）：
-       - 20 个 ES Module 文件模块化架构
-       - Web Worker 超时终止重建（用于查找替换搜索）
-       - UTF-8 有效性检测 / 大文件历史 30 步限制
-       - Java 版本选择 / 正则安全增强 / ARIA 改进
-       - 5 语言高亮 / Shadow DOM 高亮层 / 折叠 / 查找替换
+     【保留特性（v8.3.0 及更早）】
+       - 导入 / 下载 / 更改保存目录 位于「查找替换」与「运行」之间
+       - 自定义文件后缀输入框 + 历史下拉（字母排序 / 去重 / 上限 20 条 / 小写统一）
+       - Dark / Light / Ink / Cream 四主题
+       - 5 语言语法高亮 + Shadow DOM 高亮层 + 代码折叠
+       - 查找替换（Web Worker 超时终止重建 / 正则安全检测）
+       - Java 编译运行（Piston API / 版本选择 / 30 秒超时）
+       - 编码：auto / utf-8 / utf-8-bom / windows-1252
        - IndexedDB + localStorage 双层自动保存 / 紧急保存
-       - 4 主题 / 字体缩放 / 自动换行 / 缩进切换 / 全部快捷键
+       - 字体缩放 / 自动换行 / 缩进切换 / 全部快捷键
+       - ES Module 多文件模块化架构
 
      访问方式：必须通过 HTTP/HTTPS 访问（ES Module 在 file:// 下会被 CORS 拦截）。
        本地开发：`python3 -m http.server 8000`，然后访问 http://localhost:8000
@@ -110,6 +69,10 @@
                     </select>
                     <span class="java-version-arrow">▼</span>
                 </div>
+                <div class="file-extension-input-wrapper" id="fileExtensionWrapper" title="自定义保存文件后缀（留空则按当前语言自动推断）">
+                    <input type="text" id="fileExtensionInput" class="file-extension-input" placeholder="后缀" aria-label="自定义文件后缀" maxlength="12" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-haspopup="listbox" aria-expanded="false">
+                    <div class="file-extension-dropdown" id="fileExtensionDropdown" role="listbox" aria-label="历史文件后缀" style="display:none;"></div>
+                </div>
                 <div class="toolbar-divider"></div>
                 <button class="btn btn-ghost" id="btnUndo" title="撤销" aria-label="撤销">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
@@ -131,6 +94,10 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path d="M16 16l5 5"/></svg>
                 </button>
                 <div class="toolbar-divider"></div>
+                <button class="btn btn-ghost" id="btnImport" title="导入文件"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
+                <button class="btn btn-ghost" id="btnDownload" title="下载文件"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                <button class="btn btn-ghost" id="btnChangeSaveDir" title="更改保存位置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 11 15 14"/></svg></button>
+                <div class="toolbar-divider"></div>
                 <button class="btn btn-run" id="btnRun" title="编译并运行 (Java)">
                     <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     <span>运行</span>
@@ -140,10 +107,6 @@
                     <svg id="checkIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:none;"><polyline points="20 6 9 17 4 12"/></svg>
                     <span id="copyText">复制</span>
                 </button>
-                <div class="toolbar-divider"></div>
-                <button class="btn btn-ghost" id="btnImport" title="导入文件"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
-                <button class="btn btn-ghost" id="btnDownload" title="下载文件"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
-                <button class="btn btn-ghost" id="btnChangeSaveDir" title="更改保存位置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 11 15 14"/></svg></button>
                 <div class="toolbar-divider"></div>
                 <button class="btn btn-ghost" id="btnTheme" title="切换主题">☀️</button>
                 <button class="btn btn-ghost" id="btnHelp" title="快捷键">?</button>

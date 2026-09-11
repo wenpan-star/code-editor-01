@@ -1,13 +1,27 @@
-/**
+﻿/**
  * ============================================================================
  * ui.js — 主 UI 事件
  * ============================================================================
  *
+ * 本模块职责：
+ *   1. 主题切换 / 字体缩放 / 自动换行 / 缩进设置
+ *   2. 帮助弹窗 / 大文件弹窗
+ *   3. 全局快捷键（Ctrl +/-/0/F/H/G/S/T/Enter/Shift+C，Ctrl+Z/Y）
+ *   4. 复制 / 清空 / 全选 / 撤销 / 重做 按钮
+ *   5. 高亮状态指示器点击
+ *   6. 智能 textarea 高度调整
+ *   7. 页面隐藏 / 卸载时终止 Worker + 紧急保存
+ *
+ * 【v8.5.5 变更】
+ *   语言下拉框 change 事件简化为仅调用 switchLanguage。
+ *   switchLanguage 内部通过注入的回调（setUpdateFileExtensionCallback）
+ *   自动触发后缀联动，不再需要在此显式调用 updateFileExtensionForLanguage。
+ *   这也移除 ui.js 对 file-io.js 的导入依赖，降低模块耦合度。
+ *
  * 【v8.5.0 变更】
- *   语言下拉框 change 事件在 switchLanguage 之后调用
- *   updateFileExtensionForLanguage(language)，使后缀框自动跟随语言：
- *     JS → js、HTML → html、CSS → css、PY → py、JV → java、TXT → 自由输入
- *   前 5 语言后缀框 readOnly（HTML 除外），TXT 后缀框可编辑。
+ *   语言下拉框 change 事件在 switchLanguage 之后额外调用
+ *   updateFileExtensionForLanguage，使后缀框自动跟随语言。
+ *   （v8.5.5 已将此逻辑上移到 switchLanguage，此处不再需要）
  * ============================================================================
  */
 
@@ -44,8 +58,6 @@ import { scrollToCursor, updateCursorPosition } from './line-numbers.js';
 import { toggleReplaceModal, openReplaceModal } from './search.js';
 import { runJavaCode } from './java-runner.js';
 import { historyManager } from './history.js';
-// v8.5.0：后缀随语言切换
-import { updateFileExtensionForLanguage } from './file-io.js';
 
 // ==================== 主题 ====================
 
@@ -495,12 +507,12 @@ export function setupUIEvents() {
     // 查找替换
     DOM.btnToggleReplace.addEventListener('click', toggleReplaceModal);
 
-    // 语言下拉框（v8.5.0：切换后自动更新后缀框）
+    // 语言下拉框
+    // v8.5.5：switchLanguage 内部通过回调自动同步后缀框，
+    //         无需再显式调用 updateFileExtensionForLanguage。
     if (DOM.langSelect) {
         DOM.langSelect.addEventListener('change', function() {
-            const newLanguage = this.value;
-            switchLanguage(newLanguage);
-            updateFileExtensionForLanguage(newLanguage);
+            switchLanguage(this.value);
         });
     }
 

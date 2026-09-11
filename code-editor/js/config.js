@@ -1,9 +1,14 @@
-/**
+﻿/**
  * ============================================================================
  * config.js — 常量、默认值、语言与编码定义
  * ============================================================================
  *
  * 集中管理应用常量与默认值，无 DOM 依赖、无副作用。
+ *
+ * 【v8.5.5 变更】
+ *   - APP_VERSION 更新为 '8.5.5'
+ *   - LANGUAGE_SHOW_HISTORY_DROPDOWN.html 由 false 改为 true：
+ *     HTML 后缀框现在也支持历史下拉（与 TXT 一致）。
  *
  * 【v8.5.0 新增】
  *   - LANGUAGE_DISPLAY_NAMES / LANGUAGE_EXTENSIONS / MIME_TYPES /
@@ -12,14 +17,11 @@
  *   - LANGUAGE_ALLOW_CUSTOM_EXTENSION：语言 → 是否允许用户修改后缀
  *   - LANGUAGE_SHOW_HISTORY_DROPDOWN：语言 → 是否显示历史后缀下拉
  *   - STORAGE_KEYS.LANGUAGE_EXTENSION_MAP：每语言后缀映射的持久化键
- *
- * 【v8.5.3 变更】
- *   - APP_VERSION 更新为 '8.5.3'
  * ============================================================================
  */
 
 export const CONFIG = Object.freeze({
-    APP_VERSION: '8.5.3',
+    APP_VERSION: '8.5.5',
 
     // ---- 大文件阈值 ----
     LARGE_FILE_THRESHOLD: 300 * 1024,
@@ -145,11 +147,12 @@ export const LANGUAGE_ALLOW_CUSTOM_EXTENSION = Object.freeze({
 
 /**
  * v8.5.0 新增：语言 → 是否显示历史后缀下拉。
- * 仅 TXT 显示；前 5 语言的默认后缀不进入历史记录。
+ * v8.5.5 变更：html 由 false 改为 true —— HTML 后缀框现支持历史下拉，
+ *              与 TXT 一致（聚焦 / 点击显示历史，输入新后缀进入历史）。
  */
 export const LANGUAGE_SHOW_HISTORY_DROPDOWN = Object.freeze({
     js: false,
-    html: false,
+    html: true,
     css: false,
     python: false,
     java: false,

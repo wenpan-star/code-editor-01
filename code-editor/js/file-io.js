@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ============================================================================
  * file-io.js — 文件导入 / 下载 / 拖拽 / 后缀联动 / 历史下拉
  * ============================================================================
@@ -10,34 +10,46 @@
  *   3. 拖拽：监听 editorWrapper 的 dragover / drop
  *   4. 后缀联动：语言切换时后缀自动跟随；前 5 语言默认后缀只读（HTML 可编辑）；
  *      每语言独立保存后缀（EditorState.languageExtensionMap）。
- *   5. 历史下拉：仅 TXT 语言显示；单击项 = 选择；单击 × = 删除。
+ *   5. 历史下拉：HTML / TXT 语言显示；单击项 = 选择；单击 × = 删除。
+ *
+ * 【v8.5.6 变更】
+ *   清理 suppressNextBlurHistory 死代码。
+ *   v8.5.5 已将历史记录入口统一到 change 事件；blur 事件不再调用
+ *   addToFileExtensionHistory。此时 suppressNextBlurHistory 标志的检查
+ *   已无意义——两个分支都只调用 hideFileExtensionDropdown()。
+ *   本版删除：
+ *     - 模块级变量 suppressNextBlurHistory 声明；
+ *     - blur 事件中的标志检查分支；
+ *     - keydown Escape 分支中的标志置位语句。
+ *   对外行为完全一致。
+ *
+ * 【v8.5.5 保留】
+ *   1. 导入文件后后缀自动跟随语言：由 editor-api.js 的 switchLanguage
+ *      内部回调自动处理（无需本模块改动）。
+ *   2. updateFileExtensionPlaceholder 的 HTML 分支 title 更新为
+ *      反映"可点击选择历史后缀"。
+ *   3. blur 事件移除 addToFileExtensionHistory 调用，避免 HTML 默认值
+ *      'html' 在用户仅聚焦后失焦时被误加入历史。
  *
  * 【v8.5.4 修复】
- *   空字符串旧 FILE_EXTENSION 键清理：
- *     原实现在 if (oldSingleExtension) 分支内执行 localStorage.removeItem，
- *     仅当旧值非空字符串时才清理。若旧值为空字符串 ''（用户曾清空过输入框
- *     后系统持久化），键不会被清理而永久残留。
- *     修复方式：改用 localStorage.getItem(...) !== null 判断键的存在性，
- *     无论值是否为空，只要键存在即执行迁移与清理。
- *     值非空时才作为 TXT 语言初始后缀写入 languageExtensionMap.txt。
+ *   空字符串旧 FILE_EXTENSION 键清理：改用 localStorage.getItem(...) !== null
+ *   判断键的存在性，无论值是否为空，只要键存在即执行迁移与清理。
  *
  * 【v8.5.1 保留修复】
- *   1. 移除死代码 persistCurrentLanguageExtension（定义后从未调用）。
- *   2. 迁移完成后清理旧 localStorage 键 FILE_EXTENSION
- *      （editor-file-extension-v8），避免长期占用存储。
+ *   移除死代码 persistCurrentLanguageExtension。
  *
  * 【v8.5.0 保留】
  *   - 语言切换自动跟随后缀（JS→js / HTML→html / CSS→css / PY→py / JV→java / TXT→自由）
  *   - 前 5 语言后缀只读（HTML 除外）
  *   - 新增 TXT 语言（纯文本模式）
- *   - 历史下拉仅 TXT 显示
+ *   - 历史下拉显示于 HTML / TXT 语言
  *   - 每语言独立保存后缀
  *   - 移除右键菜单，改用下拉项右侧 × 删除按钮
  *   - 旧数据兼容：v8.4.1 的 editor-file-extension-v8 单一值迁移为 TXT 初始后缀
  *
  * 【v8.4.x 及更早保留】
  *   - showDirectoryPicker 自动使用上次保存目录作为 startIn
- *   - 输入净化 / Escape 语义修正 / initializeFileExtensionInput 幂等保护
+ *   - 输入净化 / initializeFileExtensionInput 幂等保护
  *   - IndexedDB 连接在 finally 中关闭
  *
  * 依赖：
@@ -91,9 +103,6 @@ let isSanitizingFileExtension = false;
 // 幂等保护标志：防止 initializeFileExtensionInput 被重复调用。
 let isFileExtensionInputInitialized = false;
 
-// Escape 抑制标志：按 Escape 时不写入历史。
-let suppressNextBlurHistory = false;
-
 // ==================== 导入 ====================
 
 function loadFileIntoEditor(file) {
@@ -139,6 +148,8 @@ function loadFileIntoEditor(file) {
 
         const fileExtension = file.name.split('.').pop().toLowerCase();
         if (EXTENSION_LANGUAGE_MAP[fileExtension]) {
+            // v8.5.5：switchLanguage 内部已通过回调自动调用
+            // updateFileExtensionForLanguage，后缀框会自动跟随语言。
             switchLanguage(EXTENSION_LANGUAGE_MAP[fileExtension]);
         }
         showToast('📂 已加载 ' + file.name + ' (' + ENCODING_DISPLAY_NAMES[finalEncoding] + ')');
@@ -302,8 +313,8 @@ export function removeFromFileExtensionHistory(extensionText) {
  *   6. 隐藏历史下拉（语言切换后不应保持打开）。
  *   7. 持久化映射。
  *
- * 由 ui.js 在语言下拉框的 change 事件中调用；由 initializeFileExtensionInput
- * 在初始化时调用一次。
+ * v8.5.5：由 editor-api.js 的 switchLanguage 通过回调自动调用，
+ *         无需在调用方（ui.js / file-io.js）显式触发。
  */
 export function updateFileExtensionForLanguage(language) {
     if (!DOM.fileExtensionInput) return;
@@ -352,7 +363,7 @@ export function updateFileExtensionForLanguage(language) {
 function renderFileExtensionDropdown(filterText) {
     if (!DOM.fileExtensionDropdown) return;
 
-    // 仅允许显示历史下拉的语言才渲染
+    // 仅允许显示历史下拉的语言才渲染（v8.5.5：HTML / TXT 都允许）
     const currentLang = EditorState.currentLanguage;
     if (!LANGUAGE_SHOW_HISTORY_DROPDOWN[currentLang]) {
         DOM.fileExtensionDropdown.style.display = 'none';
@@ -482,25 +493,31 @@ export function hideFileExtensionDropdown() {
 
 /**
  * 更新输入框的 placeholder 与 title，使其反映当前语言的可用性。
+ *
+ * v8.5.5：HTML 的 title 更新为反映"可点击选择历史后缀"，
+ *         与 HTML 现在支持历史下拉的新行为保持一致。
  */
 export function updateFileExtensionPlaceholder() {
     if (!DOM.fileExtensionInput) return;
     const currentLang = EditorState.currentLanguage;
     const autoExtension = AUTO_EXTENSION_BY_LANGUAGE[currentLang] || '';
     const allowCustom = LANGUAGE_ALLOW_CUSTOM_EXTENSION[currentLang] === true;
+    const showHistory = LANGUAGE_SHOW_HISTORY_DROPDOWN[currentLang] === true;
 
     if (!allowCustom) {
-        // JS / CSS / PY / JV：后缀固定
+        // JS / CSS / PY / JV：后缀固定只读
         DOM.fileExtensionInput.placeholder = autoExtension;
         DOM.fileExtensionInput.title = '当前语言后缀固定为 .' + autoExtension;
     } else if (currentLang === 'txt') {
         // TXT：自由输入 + 历史下拉
         DOM.fileExtensionInput.placeholder = '后缀';
-        DOM.fileExtensionInput.title = '输入自定义后缀（回车 / 失焦后记入历史）';
+        DOM.fileExtensionInput.title = '输入自定义后缀（回车 / 失焦后记入历史；点击可选择历史后缀）';
     } else {
-        // HTML：默认 html 但可修改
+        // HTML：默认 html 但可修改；v8.5.5 起也支持历史下拉
         DOM.fileExtensionInput.placeholder = autoExtension;
-        DOM.fileExtensionInput.title = '默认 .' + autoExtension + '（可修改）';
+        DOM.fileExtensionInput.title = showHistory
+            ? '默认 .' + autoExtension + '（可修改；点击可选择历史后缀）'
+            : '默认 .' + autoExtension + '（可修改）';
     }
 }
 
@@ -607,13 +624,15 @@ export function initializeFileExtensionInput() {
 
         updateFileExtensionPlaceholder();
 
-        // 仅 TXT 语言显示历史下拉
+        // HTML / TXT 语言显示历史下拉
         if (LANGUAGE_SHOW_HISTORY_DROPDOWN[EditorState.currentLanguage]) {
             showFileExtensionDropdown(this.value);
         }
     });
 
     // ---- 6. change 事件 ----
+    // v8.5.5：历史记录**唯一**入口（enter 键也作为补充入口）。
+    // 该事件在用户修改后缀且随后失焦时触发，此时才视为"使用了该后缀"。
     DOM.fileExtensionInput.addEventListener('change', function() {
         const sanitizedValue = sanitizeFileExtension(this.value);
         if (this.value !== sanitizedValue) {
@@ -625,7 +644,7 @@ export function initializeFileExtensionInput() {
         EditorState.languageExtensionMap[EditorState.currentLanguage] = sanitizedValue;
         saveToLocalStorage(STORAGE_KEYS.LANGUAGE_EXTENSION_MAP, EditorState.languageExtensionMap);
 
-        // 仅 TXT 语言把后缀写入历史
+        // HTML / TXT 语言把后缀写入历史
         if (LANGUAGE_SHOW_HISTORY_DROPDOWN[EditorState.currentLanguage] && sanitizedValue) {
             addToFileExtensionHistory(sanitizedValue);
         }
@@ -645,16 +664,11 @@ export function initializeFileExtensionInput() {
     });
 
     // ---- 8. blur ----
+    // v8.5.6：简化为仅隐藏下拉。
+    //   v8.5.5 已移除此处的 addToFileExtensionHistory 调用，历史记录
+    //   由 change 事件与 Enter 键统一负责。suppressNextBlurHistory 标志
+    //   因两个分支行为一致而失去意义，本版一并清理。
     DOM.fileExtensionInput.addEventListener('blur', function() {
-        if (suppressNextBlurHistory) {
-            suppressNextBlurHistory = false;
-            hideFileExtensionDropdown();
-            return;
-        }
-        const currentValue = sanitizeFileExtension(this.value);
-        if (LANGUAGE_SHOW_HISTORY_DROPDOWN[EditorState.currentLanguage] && currentValue) {
-            addToFileExtensionHistory(currentValue);
-        }
         hideFileExtensionDropdown();
     });
 
@@ -662,7 +676,7 @@ export function initializeFileExtensionInput() {
     DOM.fileExtensionInput.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') {
             event.preventDefault();
-            suppressNextBlurHistory = true;
+            // v8.5.6：无需再置位 suppressNextBlurHistory 标志。
             hideFileExtensionDropdown();
             this.blur();
             return;
@@ -776,7 +790,7 @@ async function handleDownloadClick() {
         ? (MIME_TYPES[EditorState.currentLanguage] || 'text/plain')
         : 'text/plain';
 
-    // 仅 TXT 语言把当前值作为历史写入
+    // HTML / TXT 语言把当前值作为历史写入
     if (LANGUAGE_SHOW_HISTORY_DROPDOWN[EditorState.currentLanguage] && fileExtension) {
         addToFileExtensionHistory(fileExtension);
     }

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ============================================================================
  * editor-api.js — 统一编辑入口 / 状态协调层
  * ============================================================================
@@ -14,9 +14,21 @@
  *   - updateFileNameDisplay
  *   - handleUndo / handleRedo / updateUndoRedoState
  *   - updateRunButtonState / toggleClearButton / switchLanguage
+ *   - setUpdateMatchCountCallback      注入匹配计数防抖回调
+ *   - setUpdateFileExtensionCallback   注入后缀联动回调（v8.5.5 新增）
  *
- * 循环依赖解除方案：search.js 中的 updateMatchCountDebounced 通过
- * setUpdateMatchCountCallback 注入，避免 editor-api.js ←→ search.js 循环。
+ * 循环依赖解除方案：
+ *   - search.js 的 updateMatchCountDebounced 通过 setUpdateMatchCountCallback 注入；
+ *   - file-io.js 的 updateFileExtensionForLanguage 通过
+ *     setUpdateFileExtensionCallback 注入。
+ *   两者都避免 editor-api.js ←→ 其他模块 的循环依赖。
+ *
+ * 【v8.5.5 变更】
+ *   switchLanguage 增加回调注入机制：任何调用 switchLanguage 的路径
+ *   （ui.js 语言下拉、file-io.js 导入检测）都会自动同步后缀框。
+ *   原实现在 ui.js 中显式调用 updateFileExtensionForLanguage，仅在
+ *   用户主动切换语言时触发；file-io.js 的导入流程未触发，导致导入
+ *   文件后语言跟随后缀不跟随。
  *
  * v8.1.0 变更：
  *   switchLanguage 由原来循环遍历 .lang-label 按钮改为操作单个下拉框
@@ -54,7 +66,12 @@ import { closeOutputPanel } from './output.js';
 import { saveCodeToIndexedDB, loadCodeFromIndexedDB } from './storage.js';
 
 // ==================== 注入的回调 ====================
+
+// 匹配计数防抖回调（来自 search.js 的 updateMatchCountDebounced）。
 let updateMatchCountCallback = null;
+
+// v8.5.5：后缀联动回调（来自 file-io.js 的 updateFileExtensionForLanguage）。
+let updateFileExtensionCallback = null;
 
 /**
  * main.js 注入 updateMatchCountDebounced（来自 search.js）。
@@ -63,6 +80,19 @@ let updateMatchCountCallback = null;
  */
 export function setUpdateMatchCountCallback(callback) {
     updateMatchCountCallback = callback;
+}
+
+/**
+ * v8.5.5：main.js 注入 updateFileExtensionForLanguage（来自 file-io.js）。
+ * 注入后，任何调用 switchLanguage 的路径都会自动同步后缀框，例如：
+ *   - ui.js 语言下拉 change 事件
+ *   - file-io.js 的 loadFileIntoEditor 导入文件后检测到语言
+ *   - 未来新增的其他调用路径
+ * 这样"切换语言"成为一个原子操作，其所有副作用（高亮更新、
+ * 运行按钮状态、后缀联动）都由 switchLanguage 统一负责。
+ */
+export function setUpdateFileExtensionCallback(callback) {
+    updateFileExtensionCallback = callback;
 }
 
 // ==================== 统一编辑入口 ====================
@@ -361,21 +391,50 @@ export function updateUndoRedoState() {
 
 // ==================== 语言切换 ====================
 
+/**
+ * 切换语言并同步所有相关状态。
+ *
+ * v8.5.5：本函数现在是"切换语言"的**唯一原子操作**，包括：
+ *   1. 更新 EditorState.currentLanguage；
+ *   2. 持久化到 localStorage；
+ *   3. 同步语言下拉框 value；
+ *   4. 更新状态栏语言全称；
+ *   5. 调度语法高亮刷新；
+ *   6. 更新运行按钮状态；
+ *   7. 非 Java 语言时关闭输出面板；
+ *   8. 触发后缀联动回调（若已注入）—— 保证后缀框自动跟随语言。
+ *
+ * 由 ui.js 的语言下拉 change 事件、file-io.js 的文件导入路径调用。
+ */
 export function switchLanguage(language) {
     EditorState.currentLanguage = language;
     saveToLocalStorage(STORAGE_KEYS.LANGUAGE, language);
 
-    // v8.1.0：语言选择改为单个下拉框，直接同步 value。
+    // 语言选择为单个下拉框，直接同步 value。
     if (DOM.langSelect) {
         DOM.langSelect.value = language;
     }
 
-    // 状态栏显示全称（如 JavaScript）
+    // 状态栏显示全称（如 JavaScript）。
     DOM.langDisplay.textContent = LANGUAGE_DISPLAY_NAMES[language] || language;
 
     scheduleHighlightUpdate();
     updateRunButtonState();
     if (language !== 'java' && EditorState.outputPanelOpen && !EditorState.isRunning) {
         closeOutputPanel();
+    }
+
+    // v8.5.5：触发后缀联动回调（若已注入）。
+    // 支持所有调用路径自动同步后缀框：
+    //   - ui.js 语言下拉切换
+    //   - file-io.js 导入文件检测到语言
+    //   - 未来新增的其他调用路径
+    // 回调可能抛出异常（例如输入框尚未挂载），已做防御性 try / catch。
+    if (updateFileExtensionCallback) {
+        try {
+            updateFileExtensionCallback(language);
+        } catch (callbackError) {
+            console.warn('后缀联动回调执行失败:', callbackError);
+        }
     }
 }

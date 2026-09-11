@@ -8,7 +8,7 @@
  */
 
 export const CONFIG = Object.freeze({
-    APP_VERSION: '8.3.1',
+    APP_VERSION: '8.4.0',
 
     // ---- 大文件阈值 ----
     LARGE_FILE_THRESHOLD: 300 * 1024,
@@ -29,8 +29,6 @@ export const CONFIG = Object.freeze({
     SEARCH_TIMEOUT_GRACE_MS: 100,
 
     // ---- 匹配计数防抖 ----
-    // 统一由 search.js 的 updateMatchCountDebounced 使用，
-    // fullUpdate 注入的回调也是这个防抖版本，避免被绕过。
     MATCH_COUNT_DEBOUNCE_MS: 150,
 
     // ---- Java 运行 ----
@@ -40,10 +38,7 @@ export const CONFIG = Object.freeze({
     TOAST_DURATION_MS: 2500,
 
     // ---- 自定义文件后缀 ----
-    // 输入框允许的最大字符数（同时用于 HTML maxlength 与净化函数）。
     FILE_EXTENSION_MAX_LENGTH: 12,
-    // 历史后缀下拉列表最多保留的条目数。
-    // 超出上限时，按字母排序位于末位的旧条目将被移除。
     FILE_EXTENSION_HISTORY_MAX: 20
 });
 
@@ -70,9 +65,7 @@ export const STORAGE_KEYS = Object.freeze({
     LAST_DOWNLOAD_FILENAME: 'editor-last-download-filename',
     REPLACE_FIND_MANUAL_HEIGHT: 'replace-find-manual-height',
     REPLACE_WITH_MANUAL_HEIGHT: 'replace-with-manual-height',
-    // 当前自定义文件后缀（字符串，已净化的后缀，空字符串表示"自动"）。
     FILE_EXTENSION: 'editor-file-extension-v8',
-    // 历史后缀列表（字符串数组，已去重并排序）。
     FILE_EXTENSION_HISTORY: 'editor-file-extension-history-v8'
 });
 

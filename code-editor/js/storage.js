@@ -2,16 +2,19 @@
  * ============================================================================
  * storage.js — 三层存储封装
  * ============================================================================
- * 版本：v8.0.0
- * 更新日期：2026-09-11
  *
- * 重构说明：
- *   1. localStorage：小型缓存（主题、缩进、编辑内容 < 500KB）
- *      —— 由 util.js 提供 saveToLocalStorage / loadFromLocalStorage
- *   2. IndexedDB：大文件自动保存
- *   3. File System Access API 目录句柄：用户选择的保存目录
+ * 1. localStorage：小型缓存（主题、缩进、编辑内容 < 500KB）
+ *    —— 由 util.js 提供 saveToLocalStorage / loadFromLocalStorage
+ * 2. IndexedDB：大文件自动保存 + 保存目录句柄
+ * 3. File System Access API 目录句柄：用户选择的保存目录
  *
  * 所有函数均包含异常处理，静默降级。
+ *
+ * v8.4.0 新增：
+ *   loadDirectoryHandleForStartIn —— 读取保存的目录句柄，但**不做权限检查**。
+ *   用于 window.showDirectoryPicker 的 startIn 选项，使对话框下次打开时
+ *   自动定位到上次选择的目录。若句柄不存在或读取失败，返回 null，
+ *   调用方应回退到 'documents' 等默认位置。
  * ============================================================================
  */
 
@@ -117,6 +120,41 @@ export async function loadDirectoryHandle() {
         if (permission !== 'granted') return null;
     }
     return handle;
+}
+
+/**
+ * v8.4.0 新增：读取保存的目录句柄，但**不做权限检查**。
+ *
+ * 用途：作为 window.showDirectoryPicker 的 startIn 选项，使对话框下次
+ * 打开时自动定位到上次选择的目录。即使句柄的读 / 写权限已被系统撤销，
+ * 其路径信息通常依然可用，可作为初始位置提示。
+ *
+ * 返回值：
+ *   - 成功且存在句柄：返回该 FileSystemDirectoryHandle
+ *   - 无保存句柄或读取失败：返回 null
+ *
+ * 所有异常被捕获，永不抛错，调用方无需 try / catch。
+ */
+export async function loadDirectoryHandleForStartIn() {
+    try {
+        const db = await openDirectoryDB();
+        const tx = db.transaction(DIR_HANDLE_DB.STORE_NAME, 'readonly');
+        const getRequest = tx.objectStore(DIR_HANDLE_DB.STORE_NAME).get(DIR_HANDLE_DB.KEY);
+        const handle = await new Promise(function(resolve, reject) {
+            getRequest.onsuccess = function() {
+                resolve(getRequest.result);
+            };
+            getRequest.onerror = function(event) {
+                reject(event.target.error);
+            };
+        });
+        db.close();
+        return handle || null;
+    } catch (loadError) {
+        // IndexedDB 不可用、数据库不存在、句柄已失效等情况下，
+        // 静默返回 null；调用方回退到默认起始位置。
+        return null;
+    }
 }
 
 export async function clearDirectoryHandle() {

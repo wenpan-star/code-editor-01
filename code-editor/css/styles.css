@@ -1,17 +1,9 @@
 ﻿/* ============================================================================
- * styles.css — 在线代码编辑器 · 专业版 v8.3.0
+ * styles.css — 在线代码编辑器 · 专业版 v8.4.0
  * ============================================================================
  *
- * 【本次更新说明】
- *   1. 新增 .file-extension-dropdown 及其子项 .file-extension-dropdown-item
- *      样式，用于展示历史后缀下拉列表：
- *        - 绝对定位在输入框下方，宽度自适应输入框宽度
- *        - 深色毛玻璃背景 + 阴影，与工具栏视觉风格统一
- *        - 选项 hover / active 状态高亮
- *        - 在 640px 窄屏媒体查询下同步缩放字号与内边距
- *
- *   2. 其余视觉规范（四主题、字体阶梯、间距网格、按钮高度、下拉框统一
- *      样式等）保持不变。工具栏按钮位置调整不影响任何 CSS 规则。
+ * 本次更新仅涉及工具栏顺序调整，样式内容无变化（所有控件使用相同的
+ * 类名与选择器，位置调整不影响视觉呈现）。版本号同步更新到 v8.4.0。
  * ============================================================================ */
 
 
@@ -646,14 +638,6 @@ body {
 
 /* ============================================================================
  * 五之二、自定义文件后缀输入框
- *
- * 与相邻下拉框保持一致的视觉规范：
- *   - 高度 32px、圆角 6px、边框 1px
- *   - 背景 --surface-light，文字 --text
- *   - hover 时边框变 --border-strong、背景变 --surface
- *   - focus 时边框变 --accent 并带 accent-subtle 焦点环
- *   - 字体采用编辑器等宽字体，突出其后缀文本属性
- *   - 内容居中，宽度固定，以便用户一眼看清所输入的短文本
  * ============================================================================ */
 
 .file-extension-input-wrapper {
@@ -702,7 +686,7 @@ body {
     background: var(--surface);
 }
 
-/* ---- 历史后缀下拉列表（v8.3.0 新增） ---- */
+/* ---- 历史后缀下拉列表 ---- */
 
 .file-extension-dropdown {
     position: absolute;
@@ -718,7 +702,6 @@ body {
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow);
     z-index: 900;
-    /* 阻止下拉列表本身触发父级 hover 状态 */
     pointer-events: auto;
 }
 
@@ -767,6 +750,46 @@ body {
     background: var(--surface-light);
     color: var(--accent);
     font-weight: 600;
+}
+
+/* ---- 历史后缀右键上下文菜单 ---- */
+
+.file-extension-context-menu {
+    position: fixed;
+    min-width: 100px;
+    padding: 4px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+    z-index: 10000;
+    display: none;
+    pointer-events: auto;
+}
+
+.file-extension-context-menu-item {
+    padding: 6px 12px;
+    font-size: var(--font-sm);
+    font-weight: 500;
+    color: var(--text);
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    user-select: none;
+    transition: background var(--transition), color var(--transition);
+}
+
+.file-extension-context-menu-item:hover {
+    background: var(--accent-subtle);
+    color: var(--accent);
+}
+
+.file-extension-context-menu-item.danger:hover {
+    background: var(--red-bg);
+    color: var(--red);
 }
 
 
@@ -1478,7 +1501,7 @@ body {
         max-width: 64px;
         min-width: 60px;
     }
-    /* 自定义后缀输入框在窄屏下同步缩放，与相邻控件保持一致 */
+    /* 自定义后缀输入框在窄屏下同步缩放 */
     .file-extension-input {
         width: 62px;
         height: 30px;
@@ -1491,6 +1514,11 @@ body {
     }
     .file-extension-dropdown-item {
         padding: 5px 8px;
+        font-size: var(--font-xs);
+    }
+    /* 右键上下文菜单在窄屏下同步缩放 */
+    .file-extension-context-menu-item {
+        padding: 5px 10px;
         font-size: var(--font-xs);
     }
     .line-numbers {

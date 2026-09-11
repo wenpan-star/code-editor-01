@@ -1,16 +1,18 @@
-﻿/**
+/**
  * ============================================================================
  * config.js — 常量、默认值、语言与编码定义
  * ============================================================================
  *
  * 集中管理应用常量与默认值，无 DOM 依赖、无副作用。
  *
- * 【v8.5.5 变更】
- *   - APP_VERSION 更新为 '8.5.5'
- *   - LANGUAGE_SHOW_HISTORY_DROPDOWN.html 由 false 改为 true：
- *     HTML 后缀框现在也支持历史下拉（与 TXT 一致）。
+ * 【v8.5.7 变更】
+ *   - APP_VERSION 更新为 '8.5.7'
  *
- * 【v8.5.0 新增】
+ * 【v8.5.5 保留】
+ *   - LANGUAGE_SHOW_HISTORY_DROPDOWN.html 为 true：
+ *     HTML 后缀框支持历史下拉（与 TXT 一致）。
+ *
+ * 【v8.5.0 保留】
  *   - LANGUAGE_DISPLAY_NAMES / LANGUAGE_EXTENSIONS / MIME_TYPES /
  *     EXTENSION_LANGUAGE_MAP / DEFAULT_CODE_BY_LANGUAGE 增加 txt 语言
  *   - AUTO_EXTENSION_BY_LANGUAGE：语言 → 默认后缀映射
@@ -21,7 +23,7 @@
  */
 
 export const CONFIG = Object.freeze({
-    APP_VERSION: '8.5.5',
+    APP_VERSION: '8.5.7',
 
     // ---- 大文件阈值 ----
     LARGE_FILE_THRESHOLD: 300 * 1024,
@@ -82,7 +84,6 @@ export const STORAGE_KEYS = Object.freeze({
     REPLACE_WITH_MANUAL_HEIGHT: 'replace-with-manual-height',
     FILE_EXTENSION: 'editor-file-extension-v8',
     FILE_EXTENSION_HISTORY: 'editor-file-extension-history-v8',
-    // v8.5.0 新增：语言 → 后缀映射（对象：{ js: 'js', html: 'html', ... }）
     LANGUAGE_EXTENSION_MAP: 'editor-language-extension-map-v9'
 });
 

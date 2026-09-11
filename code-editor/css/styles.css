@@ -1,9 +1,14 @@
-﻿/* ============================================================================
- * styles.css — 在线代码编辑器 · 专业版 v8.5.5
+/* ============================================================================
+ * styles.css — 在线代码编辑器 · 专业版 v8.5.7
  * ============================================================================
  *
- * 本次更新仅涉及 JS 逻辑修复，样式内容无变化。
- * 版本号同步更新到 v8.5.5。
+ * 【本次更新说明】
+ *   1. 新增 .btn-download 样式（绿色系）：
+ *      - 默认态：淡绿背景 + 绿色文字 + 绿色边框，与 ghost 按钮明确区分。
+ *      - Hover 态：实心绿色 + 白色文字 + 阴影焦点环。
+ *      - Active 态：轻微下沉。
+ *      - 使用四主题共享的 --green / --green-bg 变量，自动适配所有主题。
+ *   2. 其余样式内容不变。
  * ============================================================================ */
 
 
@@ -438,6 +443,27 @@ body {
 
 .btn-ghost:active:not(:disabled) {
     background: var(--surface);
+}
+
+/* ---- v8.5.7 新增：下载按钮（绿） ---- */
+/* 与蓝色复制、橙色运行形成鲜明的色彩区分。
+   默认态用淡绿背景 + 绿色文字 + 绿色边框，
+   hover 时切换为实心绿 + 白字，强化反馈。 */
+.btn-download {
+    background: var(--green-bg);
+    color: var(--green);
+    border-color: var(--green);
+}
+
+.btn-download:hover:not(:disabled) {
+    background: var(--green);
+    color: #fff;
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px var(--green-bg);
+}
+
+.btn-download:active:not(:disabled) {
+    transform: translateY(1px);
 }
 
 .btn-run {

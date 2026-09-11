@@ -2,31 +2,35 @@
  * ============================================================================
  * search.js — 查找 / 替换 / 搜索 Worker
  * ============================================================================
- * 版本：v8.0.2（深度审核修复版）
- * 更新日期：2026-09-11
  *
  * 本模块职责：
- *   1. Web Worker 异步搜索（v7.7.0：超时后终止并重建 Worker）
+ *   1. Web Worker 异步搜索（超时后终止并重建 Worker）
  *   2. 主线程同步搜索用于 findNext / replaceOne
  *   3. 弹窗拖拽 / 调整大小 / 位置与尺寸持久化
  *   4. 通过 editor-api.js 的 setEditorContent 统一编辑入口
  *
- * v8.0.2 修复（问题 3）：
- *   新增导出 updateMatchCountDebounced()，将 150ms 防抖逻辑统一收敛到 search.js。
- *   main.js 通过 setUpdateMatchCountCallback 注入的不再是 updateMatchCount 本身，
- *   而是 updateMatchCountDebounced —— 这样 fullUpdate 的调用路径也会走防抖，
- *   避免 editor.js 中本地防抖被 fullUpdate 的直接调用绕过。
- *   最终效果：连续按键时，无论来自 fullUpdate 还是弹窗输入事件，
- *   都只会在最后一次按键后 MATCH_COUNT_DEBOUNCE_MS 毫秒触发一次 Worker 搜索。
+ * 【v8.5.3 修复】
+ *   setupSmartSelect 的监听器泄漏：
+ *     原实现在 mousedown 处理器内创建 onMouseMove / onMouseUp 两个
+ *     局部函数，并调用 bind(self) 得到 boundMouseMove / boundMouseUp
+ *     后添加到 document；但 removeEventListener 传入的是未绑定的
+ *     onMouseMove / onMouseUp。由于 bind 每次返回全新引用，两处引用
+ *     永不相等 —— 监听器永久累积在 document 上，造成内存泄漏与性能
+ *     渐进退化（单次 mousemove 触发 N 次无效判定）。
+ *     修复方式：在闭包外 let 声明 boundMouseMove / boundMouseUp，先赋值
+ *     后注册；事件处理器内部移除这两个闭包变量指向的引用。
+ *     对外行为完全一致（单击全选 / 拖动不选中 / 2px 阈值）。
  *
- * v8.0.2 修复（问题 4）：
- *   在 Worker 内部 onmessage 处理里加 try/catch，异常时带 requestId 回传，
- *   避免原 self.onerror 因不带 requestId 被主线程忽略，退化为超时路径。
- *   同时保留 self.onerror 作为兜底。
+ * 【v8.0.2 保留修复】
+ *   问题 3：新增导出 updateMatchCountDebounced()，将 150ms 防抖逻辑
+ *           统一收敛到 search.js。main.js 通过 setUpdateMatchCountCallback
+ *           注入的不再是 updateMatchCount 本身，而是 updateMatchCountDebounced。
+ *   问题 4：Worker 内部 onmessage 处理用 try/catch 包住，异常时带 requestId
+ *           回传 worker_error，避免原 self.onerror 因不带 requestId 被主线程忽略。
  *
- * v8.0.1 修复（问题 4 前置）：
- *   getMatchRangesAsync 的超时回调仅在 workerCallbacksMap.size === 0
- *   时才调用 terminateHighlightWorker()，避免并发请求时误杀。
+ * 【v8.0.1 保留修复】
+ *   问题 4 前置：getMatchRangesAsync 的超时回调仅在 workerCallbacksMap.size
+ *               === 0 时才调用 terminateHighlightWorker()，避免并发请求时误杀。
  *
  * 依赖：
  *   - state.js / dom.js / toast.js / util.js / config.js
@@ -667,6 +671,25 @@ export function bindReplaceModalEvents() {
     setupSmartSelect(DOM.replaceWith);
 }
 
+/**
+ * v8.5.3 修复：智能选择辅助函数。
+ *
+ * 交互逻辑（对外行为与旧版完全一致）：
+ *   - mousedown 时记录当前选中状态与初始坐标；
+ *   - 若鼠标移动超过 2px，视为拖拽 → 不触发全选；
+ *   - 若鼠标未移动（视为单击），触发 this.select() 全选内容。
+ *
+ * 修复要点：
+ *   在 mousedown 处理器的闭包外 let 声明 boundMouseMove / boundMouseUp
+ *   两个变量；先赋值（.bind(self) 得到的绑定版本），再注册到 document。
+ *   事件处理器内部通过闭包访问这两个变量，removeEventListener 时使用
+ *   的即是注册时传入的引用 —— 引用一致，监听器可被正确移除。
+ *
+ * 原实现的问题：
+ *   addEventListener 传入的是 onMouseMove.bind(self)（新引用），
+ *   removeEventListener 传入的是 onMouseMove（原始引用）——
+ *   二者永不相等，监听器永久累积在 document 上。
+ */
 function setupSmartSelect(textarea) {
     let isDragging = false;
     let hadSelection = false;
@@ -675,23 +698,27 @@ function setupSmartSelect(textarea) {
         isDragging = false;
         const startX = e.clientX;
         const startY = e.clientY;
+        const self = this;
+
+        // v8.5.3：使用 let 前置声明，确保闭包内可引用到绑定后的函数引用。
+        let boundMouseMove = null;
+        let boundMouseUp = null;
 
         function onMouseMove(moveEvent) {
             if (Math.abs(moveEvent.clientX - startX) > 2 || Math.abs(moveEvent.clientY - startY) > 2) {
                 isDragging = true;
-                document.removeEventListener('mousemove', onMouseMove);
-                document.removeEventListener('mouseup', onMouseUp);
+                if (boundMouseMove) document.removeEventListener('mousemove', boundMouseMove);
+                if (boundMouseUp) document.removeEventListener('mouseup', boundMouseUp);
             }
         }
 
         function onMouseUp() {
-            if (!hadSelection && !isDragging) this.select();
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
+            if (!hadSelection && !isDragging) self.select();
+            if (boundMouseMove) document.removeEventListener('mousemove', boundMouseMove);
+            if (boundMouseUp) document.removeEventListener('mouseup', boundMouseUp);
         }
-        const self = this;
-        const boundMouseMove = onMouseMove.bind(self);
-        const boundMouseUp = onMouseUp.bind(self);
+        boundMouseMove = onMouseMove.bind(self);
+        boundMouseUp = onMouseUp.bind(self);
         document.addEventListener('mousemove', boundMouseMove);
         document.addEventListener('mouseup', boundMouseUp);
     });

@@ -10,7 +10,15 @@
  *
  * 所有函数均包含异常处理，静默降级。
  *
- * v8.4.0 新增：
+ * 【v8.4.1 修复】
+ *   4 个目录句柄相关函数（loadDirectoryHandle /
+ *   loadDirectoryHandleForStartIn / saveDirectoryHandle /
+ *   clearDirectoryHandle）统一采用 try / finally 结构，确保在任意
+ *   抛错路径下都关闭 IndexedDB 连接。原实现在读 / 写事务 reject 时
+ *   会跳过 db.close()，造成连接残留（浏览器 GC 会自动回收，但
+ *   属于资源管理瑕疵）。修复后行为对外不变，仅消除潜在泄漏。
+ *
+ * 【v8.4.0 新增】
  *   loadDirectoryHandleForStartIn —— 读取保存的目录句柄，但**不做权限检查**。
  *   用于 window.showDirectoryPicker 的 startIn 选项，使对话框下次打开时
  *   自动定位到上次选择的目录。若句柄不存在或读取失败，返回 null，
@@ -93,33 +101,76 @@ export function openDirectoryDB() {
     });
 }
 
+/**
+ * 保存目录句柄到 IndexedDB。
+ *
+ * v8.4.1：改用 try / finally 结构，确保任意抛错路径下都关闭连接。
+ *          对外行为不变（成功 resolve，失败 reject）。
+ */
 export async function saveDirectoryHandle(handle) {
-    const db = await openDirectoryDB();
-    const tx = db.transaction(DIR_HANDLE_DB.STORE_NAME, 'readwrite');
-    tx.objectStore(DIR_HANDLE_DB.STORE_NAME).put(handle, DIR_HANDLE_DB.KEY);
-    await new Promise(function(resolve, reject) {
-        tx.oncomplete = resolve;
-        tx.onerror = reject;
-    });
-    db.close();
+    let db = null;
+    try {
+        db = await openDirectoryDB();
+        const tx = db.transaction(DIR_HANDLE_DB.STORE_NAME, 'readwrite');
+        tx.objectStore(DIR_HANDLE_DB.STORE_NAME).put(handle, DIR_HANDLE_DB.KEY);
+        await new Promise(function(resolve, reject) {
+            tx.oncomplete = resolve;
+            tx.onerror = function(event) {
+                reject(event.target.error);
+            };
+        });
+    } finally {
+        if (db) {
+            try {
+                db.close();
+            } catch (closeError) {
+                // 连接关闭异常忽略（一般不会发生）
+            }
+        }
+    }
 }
 
+/**
+ * 读取目录句柄（带权限检查）。
+ *
+ * 用于 download / changeSaveDirectory 的「是否已有可写目录」判断。
+ * 权限未授予时返回 null；句柄不存在或读取失败时返回 null。
+ *
+ * v8.4.1：改用 try / finally 结构，确保在 getRequest.onerror 或
+ *          queryPermission 抛错等任意路径下都关闭连接。
+ *          异常路径返回 null（不向上抛错），使调用方走「重新选择目录」分支。
+ */
 export async function loadDirectoryHandle() {
-    const db = await openDirectoryDB();
-    const tx = db.transaction(DIR_HANDLE_DB.STORE_NAME, 'readonly');
-    const getRequest = tx.objectStore(DIR_HANDLE_DB.STORE_NAME).get(DIR_HANDLE_DB.KEY);
-    const handle = await new Promise(function(resolve, reject) {
-        getRequest.onsuccess = function() {
-            resolve(getRequest.result);
-        };
-        getRequest.onerror = reject;
-    });
-    db.close();
-    if (handle && handle.queryPermission) {
-        const permission = await handle.queryPermission({ mode: 'readwrite' });
-        if (permission !== 'granted') return null;
+    let db = null;
+    try {
+        db = await openDirectoryDB();
+        const tx = db.transaction(DIR_HANDLE_DB.STORE_NAME, 'readonly');
+        const getRequest = tx.objectStore(DIR_HANDLE_DB.STORE_NAME).get(DIR_HANDLE_DB.KEY);
+        const handle = await new Promise(function(resolve, reject) {
+            getRequest.onsuccess = function() {
+                resolve(getRequest.result);
+            };
+            getRequest.onerror = function(event) {
+                reject(event.target.error);
+            };
+        });
+        if (handle && handle.queryPermission) {
+            const permission = await handle.queryPermission({ mode: 'readwrite' });
+            if (permission !== 'granted') return null;
+        }
+        return handle;
+    } catch (loadError) {
+        // 读取失败 / 权限查询失败，统一返回 null，让调用方走重新选择分支。
+        return null;
+    } finally {
+        if (db) {
+            try {
+                db.close();
+            } catch (closeError) {
+                // 忽略
+            }
+        }
     }
-    return handle;
 }
 
 /**
@@ -134,10 +185,13 @@ export async function loadDirectoryHandle() {
  *   - 无保存句柄或读取失败：返回 null
  *
  * 所有异常被捕获，永不抛错，调用方无需 try / catch。
+ *
+ * v8.4.1：改用 try / finally 结构，确保任意抛错路径下都关闭连接。
  */
 export async function loadDirectoryHandleForStartIn() {
+    let db = null;
     try {
-        const db = await openDirectoryDB();
+        db = await openDirectoryDB();
         const tx = db.transaction(DIR_HANDLE_DB.STORE_NAME, 'readonly');
         const getRequest = tx.objectStore(DIR_HANDLE_DB.STORE_NAME).get(DIR_HANDLE_DB.KEY);
         const handle = await new Promise(function(resolve, reject) {
@@ -148,23 +202,46 @@ export async function loadDirectoryHandleForStartIn() {
                 reject(event.target.error);
             };
         });
-        db.close();
         return handle || null;
     } catch (loadError) {
         // IndexedDB 不可用、数据库不存在、句柄已失效等情况下，
         // 静默返回 null；调用方回退到默认起始位置。
         return null;
+    } finally {
+        if (db) {
+            try {
+                db.close();
+            } catch (closeError) {
+                // 忽略
+            }
+        }
     }
 }
 
+/**
+ * 清除已保存的目录句柄。
+ *
+ * v8.4.1：改用 try / finally 结构，确保任意抛错路径下都关闭连接。
+ *          原先在 tx 未完成时抛错会跳过 db.close()。
+ */
 export async function clearDirectoryHandle() {
-    const db = await openDirectoryDB();
-    const tx = db.transaction(DIR_HANDLE_DB.STORE_NAME, 'readwrite');
-    tx.objectStore(DIR_HANDLE_DB.STORE_NAME).delete(DIR_HANDLE_DB.KEY);
-    await new Promise(function(resolve) {
-        tx.oncomplete = resolve;
-    });
-    db.close();
+    let db = null;
+    try {
+        db = await openDirectoryDB();
+        const tx = db.transaction(DIR_HANDLE_DB.STORE_NAME, 'readwrite');
+        tx.objectStore(DIR_HANDLE_DB.STORE_NAME).delete(DIR_HANDLE_DB.KEY);
+        await new Promise(function(resolve) {
+            tx.oncomplete = resolve;
+        });
+    } finally {
+        if (db) {
+            try {
+                db.close();
+            } catch (closeError) {
+                // 忽略
+            }
+        }
+    }
 }
 
 export async function writeFileToDirectory(directoryHandle, filename, contentArrayBuffer) {

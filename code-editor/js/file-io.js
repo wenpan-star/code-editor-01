@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * file-io.js — 文件导入 / 下载 / 拖拽 / 自定义文件后缀与历史下拉
+ * file-io.js — 文件导入 / 下载 / 拖拽 / 后缀联动 / 历史下拉
  * ============================================================================
  *
  * 本模块职责：
@@ -8,31 +8,37 @@
  *   2. 导出：编码文本 → 优先写入已选目录（File System Access API）
  *           → 否则触发浏览器下载
  *   3. 拖拽：监听 editorWrapper 的 dragover / drop
- *   4. 自定义文件后缀：读取输入框内容、实时净化、持久化到 localStorage，
- *      下载时优先使用该后缀（留空回退语言默认后缀）。
- *   5. 历史后缀下拉：记录用户输入过的后缀，点击输入框时弹出下拉列表供选择；
- *      按字母排序、自动去重、上限 CONFIG.FILE_EXTENSION_HISTORY_MAX；
- *      输入时按输入值过滤显示。
- *   6. 历史后缀右键菜单：右键下拉列表中的项，可「编辑」或「删除」。
- *   7. 记住上次保存位置：showDirectoryPicker 使用上次保存的目录句柄作为
- *      startIn 选项，下次打开对话框自动定位到上次目录。
+ *   4. 后缀联动：语言切换时后缀自动跟随；前 5 语言默认后缀只读（HTML 可编辑）；
+ *      每语言独立保存后缀（EditorState.languageExtensionMap）。
+ *   5. 历史下拉：仅 TXT 语言显示；单击项 = 选择；单击 × = 删除。
  *
- * 【v8.4.0 新增 / 变更】
- *   - changeSaveDirectory 与 handleDownloadClick 中的 showDirectoryPicker
- *     调用，统一走 showDirectoryPickerWithLastPosition 辅助函数：
- *       · 尝试读取上次保存的目录句柄，作为 startIn；
- *       · 若读取失败或句柄无效，回退到 'documents'；
- *       · 若 startIn 传入的句柄导致 showDirectoryPicker 抛错（非用户取消），
- *         自动重试一次并使用默认起始位置。
- *   - 依赖 storage.js 新增的 loadDirectoryHandleForStartIn（不做权限检查）。
+ * 【v8.5.4 修复】
+ *   空字符串旧 FILE_EXTENSION 键清理：
+ *     原实现在 if (oldSingleExtension) 分支内执行 localStorage.removeItem，
+ *     仅当旧值非空字符串时才清理。若旧值为空字符串 ''（用户曾清空过输入框
+ *     后系统持久化），键不会被清理而永久残留。
+ *     修复方式：改用 localStorage.getItem(...) !== null 判断键的存在性，
+ *     无论值是否为空，只要键存在即执行迁移与清理。
+ *     值非空时才作为 TXT 语言初始后缀写入 languageExtensionMap.txt。
  *
- * 【v8.3.2 保留】
- *   - 历史后缀右键菜单（编辑 / 删除）
+ * 【v8.5.1 保留修复】
+ *   1. 移除死代码 persistCurrentLanguageExtension（定义后从未调用）。
+ *   2. 迁移完成后清理旧 localStorage 键 FILE_EXTENSION
+ *      （editor-file-extension-v8），避免长期占用存储。
  *
- * 【v8.3.1 保留】
- *   - initializeFileExtensionInput 幂等保护
- *   - Escape 语义修正（suppressNextBlurHistory）
- *   - 输入时按值过滤显示下拉
+ * 【v8.5.0 保留】
+ *   - 语言切换自动跟随后缀（JS→js / HTML→html / CSS→css / PY→py / JV→java / TXT→自由）
+ *   - 前 5 语言后缀只读（HTML 除外）
+ *   - 新增 TXT 语言（纯文本模式）
+ *   - 历史下拉仅 TXT 显示
+ *   - 每语言独立保存后缀
+ *   - 移除右键菜单，改用下拉项右侧 × 删除按钮
+ *   - 旧数据兼容：v8.4.1 的 editor-file-extension-v8 单一值迁移为 TXT 初始后缀
+ *
+ * 【v8.4.x 及更早保留】
+ *   - showDirectoryPicker 自动使用上次保存目录作为 startIn
+ *   - 输入净化 / Escape 语义修正 / initializeFileExtensionInput 幂等保护
+ *   - IndexedDB 连接在 finally 中关闭
  *
  * 依赖：
  *   - state.js / config.js / dom.js / toast.js / util.js
@@ -40,9 +46,7 @@
  *   - encoding.js（detectBOMEncoding / isValidUTF8 / decodeTextFromBytes /
  *                  encodeTextToBytes / updateEncodingDisplay /
  *                  updateEncodingStatusOnly）
- *   - storage.js（目录句柄相关：loadDirectoryHandle / saveDirectoryHandle /
- *                 writeFileToDirectory / clearDirectoryHandle /
- *                 loadDirectoryHandleForStartIn）
+ *   - storage.js（目录句柄相关）
  * ============================================================================
  */
 
@@ -52,6 +56,9 @@ import {
     STORAGE_KEYS,
     ENCODING_DISPLAY_NAMES,
     LANGUAGE_EXTENSIONS,
+    AUTO_EXTENSION_BY_LANGUAGE,
+    LANGUAGE_ALLOW_CUSTOM_EXTENSION,
+    LANGUAGE_SHOW_HISTORY_DROPDOWN,
     MIME_TYPES,
     EXTENSION_LANGUAGE_MAP,
     VALID_TEXT_FILE_EXTENSION_REGEX
@@ -75,6 +82,17 @@ import {
     clearDirectoryHandle,
     loadDirectoryHandleForStartIn
 } from './storage.js';
+
+// ==================== 模块级标志 ====================
+
+// 输入净化标志：程序化修改 value 期间置位，防止二次 input 事件重复处理。
+let isSanitizingFileExtension = false;
+
+// 幂等保护标志：防止 initializeFileExtensionInput 被重复调用。
+let isFileExtensionInputInitialized = false;
+
+// Escape 抑制标志：按 Escape 时不写入历史。
+let suppressNextBlurHistory = false;
 
 // ==================== 导入 ====================
 
@@ -162,18 +180,15 @@ export function bindDragAndDropEvents() {
     });
 }
 
-// ==================== 自定义文件后缀：净化与读取 ====================
+// ==================== 后缀：净化与读取 ====================
 
 /**
- * 净化用户输入的文件后缀字符串。
- *
- * 规则：
+ * 净化后缀字符串。
  *   - 去除首尾空白
- *   - 去除所有前导点号（用户习惯输入 ".txt"，但后缀本身不含点号）
+ *   - 去除所有前导点号
  *   - 移除非字母 / 数字 / 连字符 / 下划线字符
- *   - 统一转小写（避免 "TXT" / "txt" 重复记录）
- *   - 截断到 CONFIG.FILE_EXTENSION_MAX_LENGTH（默认 12）个字符
- *   - 若结果为空字符串，表示"自动"（沿用语言默认后缀）
+ *   - 统一转小写
+ *   - 截断到 CONFIG.FILE_EXTENSION_MAX_LENGTH
  */
 export function sanitizeFileExtension(extensionText) {
     if (extensionText === null || extensionText === undefined) return '';
@@ -186,24 +201,18 @@ export function sanitizeFileExtension(extensionText) {
 }
 
 /**
- * 从输入框读取当前自定义后缀（已净化）。
- * 输入框不存在时返回空字符串（安全降级，不抛错）。
+ * 从输入框读取当前后缀（已净化）。
  */
 export function getCustomFileExtension() {
     if (!DOM.fileExtensionInput) return '';
     return sanitizeFileExtension(DOM.fileExtensionInput.value);
 }
 
-// ==================== 自定义文件后缀：历史记录管理 ====================
+// ==================== 后缀：历史记录管理 ====================
 
 /**
  * 读取历史后缀列表。
- *
- * - 从 localStorage 读取原始数组（可能为空、可能包含非法字符）。
- * - 逐项净化、去重、按字母排序。
- * - 若原始数据损坏（非数组），返回空数组。
- *
- * 注意：返回的数组是**全新实例**，调用方可安全修改而不影响存储。
+ * 从 localStorage 读取原始数组，逐项净化、去重、按字母排序。
  */
 export function loadFileExtensionHistory() {
     const rawHistory = loadFromLocalStorage(STORAGE_KEYS.FILE_EXTENSION_HISTORY, []);
@@ -218,15 +227,12 @@ export function loadFileExtensionHistory() {
     }
 
     return Array.from(sanitizedSet).sort(function(a, b) {
-        // 使用 localeCompare 按字母排序，sensitivity: 'base' 忽略大小写差异，
-        // 数字部分按自然顺序排列（例如 'e10' 排在 'e2' 之后）。
         return a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
     });
 }
 
 /**
  * 将历史后缀列表写回 localStorage。
- * 写回前再次去重、排序、截断到上限。
  */
 export function saveFileExtensionHistory(historyArray) {
     if (!Array.isArray(historyArray)) {
@@ -246,15 +252,12 @@ export function saveFileExtensionHistory(historyArray) {
         return a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
     });
 
-    // 截断到上限；超出部分按字母顺序移除末位。
     const limitedHistory = sortedHistory.slice(0, CONFIG.FILE_EXTENSION_HISTORY_MAX);
     saveToLocalStorage(STORAGE_KEYS.FILE_EXTENSION_HISTORY, limitedHistory);
 }
 
 /**
- * 将新的后缀加入历史记录。若已存在则忽略。
- *
- * @param {string} extensionText 用户输入的后缀（未净化也可）
+ * 将新后缀加入历史记录。若已存在则忽略。
  */
 export function addToFileExtensionHistory(extensionText) {
     const sanitized = sanitizeFileExtension(extensionText);
@@ -262,7 +265,6 @@ export function addToFileExtensionHistory(extensionText) {
 
     const currentHistory = loadFileExtensionHistory();
     if (currentHistory.indexOf(sanitized) !== -1) {
-        // 已经存在，不重复添加。
         return;
     }
     currentHistory.push(sanitized);
@@ -271,7 +273,6 @@ export function addToFileExtensionHistory(extensionText) {
 
 /**
  * 从历史记录中移除指定后缀。
- * 供右键菜单「删除」项调用。
  */
 export function removeFromFileExtensionHistory(extensionText) {
     const sanitized = sanitizeFileExtension(extensionText);
@@ -286,26 +287,85 @@ export function removeFromFileExtensionHistory(extensionText) {
     }
 }
 
-// ==================== 自定义文件后缀：下拉渲染 ====================
+// ==================== 后缀：语言切换联动 ====================
+
+/**
+ * 语言切换时更新后缀框。
+ *
+ * 逻辑：
+ *   1. 读取 EditorState.languageExtensionMap[language]；
+ *      若未定义，使用 AUTO_EXTENSION_BY_LANGUAGE[language] 作为初值。
+ *   2. 净化该值。
+ *   3. 应用到输入框。
+ *   4. 根据 LANGUAGE_ALLOW_CUSTOM_EXTENSION 设置 readOnly。
+ *   5. 刷新 placeholder / title。
+ *   6. 隐藏历史下拉（语言切换后不应保持打开）。
+ *   7. 持久化映射。
+ *
+ * 由 ui.js 在语言下拉框的 change 事件中调用；由 initializeFileExtensionInput
+ * 在初始化时调用一次。
+ */
+export function updateFileExtensionForLanguage(language) {
+    if (!DOM.fileExtensionInput) return;
+
+    if (!EditorState.languageExtensionMap || typeof EditorState.languageExtensionMap !== 'object') {
+        EditorState.languageExtensionMap = {};
+    }
+
+    // 若该语言无记录，用默认值
+    if (EditorState.languageExtensionMap[language] === undefined) {
+        EditorState.languageExtensionMap[language] = AUTO_EXTENSION_BY_LANGUAGE[language] || '';
+    }
+
+    // 净化（防止历史遗留非法值）
+    const sanitizedValue = sanitizeFileExtension(EditorState.languageExtensionMap[language]);
+    EditorState.languageExtensionMap[language] = sanitizedValue;
+
+    // 应用到输入框
+    DOM.fileExtensionInput.value = sanitizedValue;
+
+    // 更新 readOnly（用 readOnly 而非 disabled，保留视觉与 hover 反馈）
+    const allowCustom = LANGUAGE_ALLOW_CUSTOM_EXTENSION[language] === true;
+    DOM.fileExtensionInput.readOnly = !allowCustom;
+
+    // 刷新提示
+    updateFileExtensionPlaceholder();
+
+    // 隐藏历史下拉
+    hideFileExtensionDropdown();
+
+    // 持久化映射
+    saveToLocalStorage(STORAGE_KEYS.LANGUAGE_EXTENSION_MAP, EditorState.languageExtensionMap);
+}
+
+// ==================== 后缀：下拉渲染（× 删除按钮） ====================
 
 /**
  * 渲染历史后缀下拉列表。
  *
- * - filterText 可选参数：
- *     · undefined / null / 空字符串：显示全部历史项
- *     · 否则：仅显示小写形式包含 filterText 小写形式的历史项
- *     · 过滤后列表为空则隐藏下拉，避免空面板遮挡视线
- * - 当前输入值对应的选项标记为 .active
- * - 每个选项绑定 contextmenu 事件，弹出编辑/删除菜单
+ * - 仅当 LANGUAGE_SHOW_HISTORY_DROPDOWN[currentLanguage] 为 true 时渲染。
+ * - filterText 用于按输入过滤（小写包含匹配）。
+ * - 每项结构：<span class="file-extension-dropdown-item-text">value</span>
+ *             <span class="file-extension-dropdown-item-delete">×</span>
+ * - 单击项 = 选择；单击 × = 删除。
  */
 function renderFileExtensionDropdown(filterText) {
     if (!DOM.fileExtensionDropdown) return;
+
+    // 仅允许显示历史下拉的语言才渲染
+    const currentLang = EditorState.currentLanguage;
+    if (!LANGUAGE_SHOW_HISTORY_DROPDOWN[currentLang]) {
+        DOM.fileExtensionDropdown.style.display = 'none';
+        if (DOM.fileExtensionInput) {
+            DOM.fileExtensionInput.setAttribute('aria-expanded', 'false');
+        }
+        return;
+    }
 
     const historyList = loadFileExtensionHistory();
     const dropdownElement = DOM.fileExtensionDropdown;
     dropdownElement.innerHTML = '';
 
-    // 按输入值过滤
     const normalizedFilter = (typeof filterText === 'string') ? filterText.toLowerCase() : '';
     const filteredHistoryList = normalizedFilter
         ? historyList.filter(function(item) {
@@ -325,11 +385,34 @@ function renderFileExtensionDropdown(filterText) {
 
     for (let i = 0; i < filteredHistoryList.length; i++) {
         const extensionValue = filteredHistoryList[i];
+
         const itemElement = document.createElement('div');
         itemElement.className = 'file-extension-dropdown-item';
-        itemElement.textContent = extensionValue;
         itemElement.setAttribute('role', 'option');
         itemElement.setAttribute('data-value', extensionValue);
+
+        // 文本部分
+        const textElement = document.createElement('span');
+        textElement.className = 'file-extension-dropdown-item-text';
+        textElement.textContent = extensionValue;
+        itemElement.appendChild(textElement);
+
+        // × 删除按钮
+        const deleteButtonElement = document.createElement('span');
+        deleteButtonElement.className = 'file-extension-dropdown-item-delete';
+        deleteButtonElement.textContent = '×';
+        deleteButtonElement.title = '删除该历史后缀';
+        deleteButtonElement.addEventListener('mousedown', function(event) {
+            // 用 mousedown 而非 click：避免与项自身的 mousedown 冲突。
+            event.preventDefault();
+            event.stopPropagation();
+            removeFromFileExtensionHistory(extensionValue);
+            // 刷新下拉，保持输入框当前值的过滤状态
+            const currentInputValue = DOM.fileExtensionInput ? DOM.fileExtensionInput.value : '';
+            showFileExtensionDropdown(currentInputValue);
+        });
+        itemElement.appendChild(deleteButtonElement);
+
         if (extensionValue === currentValue) {
             itemElement.classList.add('active');
             itemElement.setAttribute('aria-selected', 'true');
@@ -337,31 +420,26 @@ function renderFileExtensionDropdown(filterText) {
             itemElement.setAttribute('aria-selected', 'false');
         }
 
-        // 使用 mousedown 而非 click：
-        //   mousedown 早于 blur 触发，且 event.preventDefault() 会阻止输入框失焦，
-        //   从而避免"点击选项时下拉框先隐藏、导致 click 丢失"的时序问题。
+        // 项本身的点击（选择）
         itemElement.addEventListener('mousedown', function(event) {
+            // 若点击目标是 × 按钮，忽略（已由 × 按钮的 mousedown 处理）
+            if (event.target === deleteButtonElement) return;
+
             event.preventDefault();
+            event.stopPropagation();
             const selectedValue = this.getAttribute('data-value') || '';
             if (DOM.fileExtensionInput) {
                 DOM.fileExtensionInput.value = selectedValue;
-            }
-            saveToLocalStorage(STORAGE_KEYS.FILE_EXTENSION, selectedValue);
-            updateFileExtensionPlaceholder();
-            hideFileExtensionDropdown();
-            if (DOM.fileExtensionInput) {
                 DOM.fileExtensionInput.focus();
             }
-        });
-
-        // 右键弹出编辑/删除菜单
-        itemElement.addEventListener('contextmenu', function(event) {
-            event.preventDefault();
-            event.stopPropagation();
-            const targetValue = this.getAttribute('data-value') || '';
-            if (targetValue) {
-                showFileExtensionContextMenu(event.clientX, event.clientY, targetValue);
+            // 同步到 map
+            if (!EditorState.languageExtensionMap || typeof EditorState.languageExtensionMap !== 'object') {
+                EditorState.languageExtensionMap = {};
             }
+            EditorState.languageExtensionMap[EditorState.currentLanguage] = selectedValue;
+            saveToLocalStorage(STORAGE_KEYS.LANGUAGE_EXTENSION_MAP, EditorState.languageExtensionMap);
+            updateFileExtensionPlaceholder();
+            hideFileExtensionDropdown();
         });
 
         dropdownElement.appendChild(itemElement);
@@ -375,12 +453,15 @@ function renderFileExtensionDropdown(filterText) {
 
 /**
  * 显示历史后缀下拉列表。
- *
- * 参数 filterText：
- *   - 不传或传空字符串：显示全部（用于 focus / click）。
- *   - 传输入值：按输入值过滤（用于 input）。
+ * 前置条件：当前语言允许显示历史下拉（内部会二次检查）。
  */
 export function showFileExtensionDropdown(filterText) {
+    if (!DOM.fileExtensionInput) return;
+    const currentLang = EditorState.currentLanguage;
+    if (!LANGUAGE_SHOW_HISTORY_DROPDOWN[currentLang]) {
+        hideFileExtensionDropdown();
+        return;
+    }
     const filter = (typeof filterText === 'string') ? filterText : '';
     renderFileExtensionDropdown(filter);
 }
@@ -397,276 +478,173 @@ export function hideFileExtensionDropdown() {
     }
 }
 
-// ==================== 自定义文件后缀：右键上下文菜单 ====================
-
-// 惰性创建的右键菜单元素（只在首次使用时创建并 append 到 body）。
-let fileExtensionContextMenuElement = null;
-
-// 当前右键的目标后缀值。菜单项被点击时用于确定操作对象。
-let fileExtensionContextMenuTargetValue = null;
+// ==================== 后缀：提示文本 ====================
 
 /**
- * 惰性创建右键菜单元素。菜单在首次右键时被创建并 append 到 document.body。
- * 后续复用同一元素，仅更新其内容与位置。
- */
-function ensureFileExtensionContextMenuElement() {
-    if (fileExtensionContextMenuElement) return fileExtensionContextMenuElement;
-
-    const menuElement = document.createElement('div');
-    menuElement.className = 'file-extension-context-menu';
-    menuElement.id = 'fileExtensionContextMenu';
-    menuElement.setAttribute('role', 'menu');
-    menuElement.style.display = 'none';
-    document.body.appendChild(menuElement);
-    fileExtensionContextMenuElement = menuElement;
-    return menuElement;
-}
-
-/**
- * 隐藏右键菜单并复位目标值。
- */
-function hideFileExtensionContextMenu() {
-    if (fileExtensionContextMenuElement) {
-        fileExtensionContextMenuElement.style.display = 'none';
-    }
-    fileExtensionContextMenuTargetValue = null;
-}
-
-/**
- * 显示右键菜单。
- *
- * @param {number} clientX 鼠标客户区 X 坐标
- * @param {number} clientY 鼠标客户区 Y 坐标
- * @param {string} extensionValue 被右键的目标后缀值
- *
- * 菜单自动避让视口边缘：若菜单在右下方向超出视口，则向左 / 向上偏移。
- */
-function showFileExtensionContextMenu(clientX, clientY, extensionValue) {
-    const menuElement = ensureFileExtensionContextMenuElement();
-    menuElement.innerHTML = '';
-    fileExtensionContextMenuTargetValue = extensionValue;
-
-    // ---- 「编辑」项 ----
-    const editItemElement = document.createElement('div');
-    editItemElement.className = 'file-extension-context-menu-item';
-    editItemElement.textContent = '编辑';
-    editItemElement.setAttribute('role', 'menuitem');
-    editItemElement.addEventListener('mousedown', function(event) {
-        event.preventDefault();
-        event.stopPropagation();
-    });
-    editItemElement.addEventListener('click', function(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        const targetValue = fileExtensionContextMenuTargetValue;
-        hideFileExtensionContextMenu();
-        if (targetValue) {
-            handleEditFileExtensionHistory(targetValue);
-        }
-    });
-    menuElement.appendChild(editItemElement);
-
-    // ---- 「删除」项 ----
-    const deleteItemElement = document.createElement('div');
-    deleteItemElement.className = 'file-extension-context-menu-item danger';
-    deleteItemElement.textContent = '删除';
-    deleteItemElement.setAttribute('role', 'menuitem');
-    deleteItemElement.addEventListener('mousedown', function(event) {
-        event.preventDefault();
-        event.stopPropagation();
-    });
-    deleteItemElement.addEventListener('click', function(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        const targetValue = fileExtensionContextMenuTargetValue;
-        hideFileExtensionContextMenu();
-        if (targetValue) {
-            handleDeleteFileExtensionHistory(targetValue);
-        }
-    });
-    menuElement.appendChild(deleteItemElement);
-
-    // ---- 先显示，再测量尺寸，最后定位 ----
-    menuElement.style.display = 'block';
-
-    const menuRect = menuElement.getBoundingClientRect();
-    const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-    const edgeMargin = 8;
-
-    let finalX = clientX;
-    let finalY = clientY;
-
-    if (finalX + menuRect.width + edgeMargin > viewportWidth) {
-        finalX = viewportWidth - menuRect.width - edgeMargin;
-    }
-    if (finalY + menuRect.height + edgeMargin > viewportHeight) {
-        finalY = viewportHeight - menuRect.height - edgeMargin;
-    }
-    if (finalX < edgeMargin) finalX = edgeMargin;
-    if (finalY < edgeMargin) finalY = edgeMargin;
-
-    menuElement.style.left = finalX + 'px';
-    menuElement.style.top = finalY + 'px';
-}
-
-/**
- * 处理右键菜单「编辑」项：
- *   - 通过 prompt 让用户输入新值（预填当前值）。
- *   - 用户取消（返回 null）→ 不修改。
- *   - 用户输入为空 → 视为删除该项。
- *   - 输入合法 → 先移除旧值，再添加新值（自动去重）。
- *     若当前输入框的值正是被编辑的旧值，同步更新输入框为新值。
- *   - 操作结束后按输入框当前内容刷新下拉。
- */
-function handleEditFileExtensionHistory(extensionValue) {
-    const userInputValue = prompt('编辑后缀（留空则删除该项）：', extensionValue);
-    if (userInputValue === null) {
-        // 用户取消，无操作
-        return;
-    }
-
-    const sanitizedNewValue = sanitizeFileExtension(userInputValue);
-    if (!sanitizedNewValue) {
-        // 输入为空 → 视为删除
-        removeFromFileExtensionHistory(extensionValue);
-    } else if (sanitizedNewValue === extensionValue) {
-        // 未改变，无操作
-    } else {
-        // 移除旧值，再添加新值（saveFileExtensionHistory 会自动去重、排序）
-        removeFromFileExtensionHistory(extensionValue);
-        addToFileExtensionHistory(sanitizedNewValue);
-
-        // 若输入框当前使用的正是被编辑的旧值，同步更新为新值
-        if (DOM.fileExtensionInput) {
-            const currentInputValue = sanitizeFileExtension(DOM.fileExtensionInput.value);
-            if (currentInputValue === extensionValue) {
-                DOM.fileExtensionInput.value = sanitizedNewValue;
-                saveToLocalStorage(STORAGE_KEYS.FILE_EXTENSION, sanitizedNewValue);
-                updateFileExtensionPlaceholder();
-            }
-        }
-    }
-
-    // 刷新下拉（保持输入框当前值的过滤状态）
-    if (DOM.fileExtensionInput) {
-        showFileExtensionDropdown(DOM.fileExtensionInput.value);
-    }
-}
-
-/**
- * 处理右键菜单「删除」项：
- *   - 从历史中移除指定后缀。
- *   - 不影响输入框当前值（历史只是"用过的记录"，不改变用户当前选择）。
- *   - 操作结束后按输入框当前内容刷新下拉。
- */
-function handleDeleteFileExtensionHistory(extensionValue) {
-    removeFromFileExtensionHistory(extensionValue);
-    if (DOM.fileExtensionInput) {
-        showFileExtensionDropdown(DOM.fileExtensionInput.value);
-    }
-}
-
-// ==================== 自定义文件后缀：提示文本 ====================
-
-/**
- * 更新输入框的占位符与提示文本，使其反映当前语言的自动默认后缀。
- * 在任何语言切换后调用（main.js 初始化、ui.js 语言切换事件）。
+ * 更新输入框的 placeholder 与 title，使其反映当前语言的可用性。
  */
 export function updateFileExtensionPlaceholder() {
     if (!DOM.fileExtensionInput) return;
-    const autoExtension = LANGUAGE_EXTENSIONS[EditorState.currentLanguage] || 'txt';
-    const customExtension = getCustomFileExtension();
-    const hasCustomValue = customExtension !== '';
-    DOM.fileExtensionInput.placeholder = autoExtension;
-    DOM.fileExtensionInput.title = hasCustomValue
-        ? '当前自定义后缀：.' + customExtension + '（清空则按语言自动使用 .' + autoExtension + '；点击输入框可选择历史后缀；右键历史项可编辑 / 删除）'
-        : '自定义保存文件后缀，留空则按语言自动使用 .' + autoExtension + '（点击输入框可选择历史后缀；右键历史项可编辑 / 删除）';
+    const currentLang = EditorState.currentLanguage;
+    const autoExtension = AUTO_EXTENSION_BY_LANGUAGE[currentLang] || '';
+    const allowCustom = LANGUAGE_ALLOW_CUSTOM_EXTENSION[currentLang] === true;
+
+    if (!allowCustom) {
+        // JS / CSS / PY / JV：后缀固定
+        DOM.fileExtensionInput.placeholder = autoExtension;
+        DOM.fileExtensionInput.title = '当前语言后缀固定为 .' + autoExtension;
+    } else if (currentLang === 'txt') {
+        // TXT：自由输入 + 历史下拉
+        DOM.fileExtensionInput.placeholder = '后缀';
+        DOM.fileExtensionInput.title = '输入自定义后缀（回车 / 失焦后记入历史）';
+    } else {
+        // HTML：默认 html 但可修改
+        DOM.fileExtensionInput.placeholder = autoExtension;
+        DOM.fileExtensionInput.title = '默认 .' + autoExtension + '（可修改）';
+    }
 }
 
-// ==================== 自定义文件后缀：初始化 ====================
-
-// 幂等保护标志。防止 initializeFileExtensionInput 被重复调用
-// 导致全局 mousedown 监听器重复注册。
-let isFileExtensionInputInitialized = false;
-
-// Escape 抑制标志。用户按 Escape 取消编辑时，不应把当前值记入
-// 历史（Escape 语义为"取消"，不是"确认"）。keydown 中置为 true，
-// blur 事件读取后立即复位。
-let suppressNextBlurHistory = false;
+// ==================== 后缀：初始化 ====================
 
 /**
- * 初始化自定义文件后缀输入框：
- *   1. 从 localStorage 恢复上次保存的后缀
- *   2. 绑定 input / change / focus / click / blur / keydown 事件
- *   3. 注册全局 mousedown（仅一次）用于点击外部关闭下拉与右键菜单
- *   4. 注册全局 keydown（仅一次）用于 Escape 关闭右键菜单
+ * 初始化自定义文件后缀输入框。
  *
- * 必须由 main.js 在语言恢复后调用，以便占位符正确反映当前语言。
- * 本函数带幂等保护，重复调用会直接返回。
+ * 步骤：
+ *   1. 从 localStorage 恢复 languageExtensionMap。
+ *   2. 兼容 v8.4.1：将 FILE_EXTENSION 单一值迁移为 TXT 语言的初始值。
+ *      v8.5.4：检测「键是否存在」而非「值是否非空」，空字符串旧值也清理。
+ *   3. 补齐所有语言的初始值。
+ *   4. 应用到输入框（通过 updateFileExtensionForLanguage）。
+ *   5. 绑定 input / change / focus / click / blur / keydown 事件。
+ *   6. 注册全局 mousedown / keydown 用于外部点击关闭。
+ *
+ * 幂等保护：重复调用直接返回。
  */
 export function initializeFileExtensionInput() {
     if (!DOM.fileExtensionInput) return;
     if (isFileExtensionInputInitialized) return;
     isFileExtensionInputInitialized = true;
 
-    // ---- 1. 恢复持久化值 ----
-    const savedExtension = loadFromLocalStorage(STORAGE_KEYS.FILE_EXTENSION, '');
-    const sanitizedSavedExtension = sanitizeFileExtension(savedExtension);
-    DOM.fileExtensionInput.value = sanitizedSavedExtension;
-    if (sanitizedSavedExtension !== savedExtension) {
-        saveToLocalStorage(STORAGE_KEYS.FILE_EXTENSION, sanitizedSavedExtension);
+    // ---- 1. 恢复映射 ----
+    const savedMap = loadFromLocalStorage(STORAGE_KEYS.LANGUAGE_EXTENSION_MAP, null);
+    if (savedMap && typeof savedMap === 'object' && !Array.isArray(savedMap)) {
+        EditorState.languageExtensionMap = savedMap;
+    } else {
+        EditorState.languageExtensionMap = {};
     }
 
-    updateFileExtensionPlaceholder();
+    // ---- 2. 兼容 v8.4.1：将单一后缀值迁移为 TXT 语言的初始值 ----
+    // v8.5.4：改用 localStorage.getItem(...) !== null 判断「键的存在性」，
+    //          与值的语义解耦 —— 无论旧值是否为空字符串，只要键存在即
+    //          执行迁移与清理，避免空字符串场景下遗留 localStorage 键。
+    let oldFileExtensionKeyExists = false;
+    try {
+        oldFileExtensionKeyExists = localStorage.getItem(STORAGE_KEYS.FILE_EXTENSION) !== null;
+    } catch (readError) {
+        // localStorage 不可用时静默忽略（键视为不存在）
+    }
+    if (oldFileExtensionKeyExists) {
+        // 迁移：仅当旧值非空且 TXT 尚未记录时才写入。
+        const oldSingleExtension = loadFromLocalStorage(STORAGE_KEYS.FILE_EXTENSION, '');
+        if (oldSingleExtension && !EditorState.languageExtensionMap.txt) {
+            const sanitizedOld = sanitizeFileExtension(oldSingleExtension);
+            if (sanitizedOld) {
+                EditorState.languageExtensionMap.txt = sanitizedOld;
+            }
+        }
+        // 清理旧键（无论值是否为空字符串）。
+        try {
+            localStorage.removeItem(STORAGE_KEYS.FILE_EXTENSION);
+        } catch (removeError) {
+            // localStorage 不可用时静默忽略
+        }
+    }
 
-    // ---- 2. input 事件：实时净化 + 持久化 + 刷新提示 + 过滤显示下拉 ----
+    // ---- 3. 补齐所有语言 ----
+    const allLanguages = ['js', 'html', 'css', 'python', 'java', 'txt'];
+    for (let i = 0; i < allLanguages.length; i++) {
+        const lang = allLanguages[i];
+        if (EditorState.languageExtensionMap[lang] === undefined) {
+            EditorState.languageExtensionMap[lang] = AUTO_EXTENSION_BY_LANGUAGE[lang] || '';
+        }
+    }
+
+    // ---- 4. 应用到输入框 ----
+    updateFileExtensionForLanguage(EditorState.currentLanguage);
+
+    // ---- 5. input 事件 ----
     DOM.fileExtensionInput.addEventListener('input', function() {
+        if (isSanitizingFileExtension) return;
+
         const rawValue = this.value;
         const sanitizedValue = sanitizeFileExtension(rawValue);
         if (rawValue !== sanitizedValue) {
+            // 精确计算光标位置（对「光标前子串」独立净化）
             const cursorPosition = this.selectionStart;
-            this.value = sanitizedValue;
-            const newCursorPosition = Math.min(cursorPosition, sanitizedValue.length);
+            const rawBeforeCursor = rawValue.slice(0, cursorPosition);
+            const sanitizedBeforeCursor = sanitizeFileExtension(rawBeforeCursor);
+            const newCursorPosition = sanitizedBeforeCursor.length;
+
+            isSanitizingFileExtension = true;
             try {
-                this.setSelectionRange(newCursorPosition, newCursorPosition);
-            } catch (selectionError) {
-                // 某些浏览器在 input 事件期间设置选区可能失败，忽略即可
+                this.value = sanitizedValue;
+                try {
+                    this.setSelectionRange(newCursorPosition, newCursorPosition);
+                } catch (selectionError) {
+                    // 忽略
+                }
+            } finally {
+                isSanitizingFileExtension = false;
             }
         }
-        saveToLocalStorage(STORAGE_KEYS.FILE_EXTENSION, this.value);
+
+        // 更新 map
+        if (!EditorState.languageExtensionMap || typeof EditorState.languageExtensionMap !== 'object') {
+            EditorState.languageExtensionMap = {};
+        }
+        EditorState.languageExtensionMap[EditorState.currentLanguage] = this.value;
+        saveToLocalStorage(STORAGE_KEYS.LANGUAGE_EXTENSION_MAP, EditorState.languageExtensionMap);
+
         updateFileExtensionPlaceholder();
-        // 输入时保留下拉，按输入值过滤显示历史项。
-        // 若过滤后为空，renderFileExtensionDropdown 会自动隐藏下拉。
-        showFileExtensionDropdown(this.value);
+
+        // 仅 TXT 语言显示历史下拉
+        if (LANGUAGE_SHOW_HISTORY_DROPDOWN[EditorState.currentLanguage]) {
+            showFileExtensionDropdown(this.value);
+        }
     });
 
-    // ---- 3. change 事件：失焦时再次净化并写入历史 ----
+    // ---- 6. change 事件 ----
     DOM.fileExtensionInput.addEventListener('change', function() {
         const sanitizedValue = sanitizeFileExtension(this.value);
         if (this.value !== sanitizedValue) {
             this.value = sanitizedValue;
         }
-        saveToLocalStorage(STORAGE_KEYS.FILE_EXTENSION, sanitizedValue);
-        if (sanitizedValue) {
+        if (!EditorState.languageExtensionMap || typeof EditorState.languageExtensionMap !== 'object') {
+            EditorState.languageExtensionMap = {};
+        }
+        EditorState.languageExtensionMap[EditorState.currentLanguage] = sanitizedValue;
+        saveToLocalStorage(STORAGE_KEYS.LANGUAGE_EXTENSION_MAP, EditorState.languageExtensionMap);
+
+        // 仅 TXT 语言把后缀写入历史
+        if (LANGUAGE_SHOW_HISTORY_DROPDOWN[EditorState.currentLanguage] && sanitizedValue) {
             addToFileExtensionHistory(sanitizedValue);
         }
         updateFileExtensionPlaceholder();
     });
 
-    // ---- 4. focus / click 事件：弹出全部历史下拉列表 ----
-    // 同时绑定 focus 与 click：focus 覆盖键盘 Tab 进入的场景，
-    // click 覆盖已聚焦后再次点击输入框的场景。
+    // ---- 7. focus / click ----
     DOM.fileExtensionInput.addEventListener('focus', function() {
-        showFileExtensionDropdown();
+        if (LANGUAGE_SHOW_HISTORY_DROPDOWN[EditorState.currentLanguage]) {
+            showFileExtensionDropdown();
+        }
     });
     DOM.fileExtensionInput.addEventListener('click', function() {
-        showFileExtensionDropdown();
+        if (LANGUAGE_SHOW_HISTORY_DROPDOWN[EditorState.currentLanguage]) {
+            showFileExtensionDropdown();
+        }
     });
 
-    // ---- 5. blur 事件：将当前值写入历史，并隐藏下拉 ----
-    // 若 suppressNextBlurHistory 标志为 true（用户按了 Escape），
-    // 跳过历史写入，直接复位标志并隐藏下拉。
+    // ---- 8. blur ----
     DOM.fileExtensionInput.addEventListener('blur', function() {
         if (suppressNextBlurHistory) {
             suppressNextBlurHistory = false;
@@ -674,31 +652,34 @@ export function initializeFileExtensionInput() {
             return;
         }
         const currentValue = sanitizeFileExtension(this.value);
-        if (currentValue) {
+        if (LANGUAGE_SHOW_HISTORY_DROPDOWN[EditorState.currentLanguage] && currentValue) {
             addToFileExtensionHistory(currentValue);
         }
         hideFileExtensionDropdown();
     });
 
-    // ---- 6. keydown 事件：Escape 隐藏下拉；Enter 提交并失焦 ----
+    // ---- 9. keydown ----
     DOM.fileExtensionInput.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') {
             event.preventDefault();
             suppressNextBlurHistory = true;
             hideFileExtensionDropdown();
-            hideFileExtensionContextMenu();
             this.blur();
             return;
         }
         if (event.key === 'Enter') {
             event.preventDefault();
-            // 主动触发一次 change 逻辑：净化 + 记录历史
             const sanitizedValue = sanitizeFileExtension(this.value);
             if (this.value !== sanitizedValue) {
                 this.value = sanitizedValue;
             }
-            saveToLocalStorage(STORAGE_KEYS.FILE_EXTENSION, sanitizedValue);
-            if (sanitizedValue) {
+            if (!EditorState.languageExtensionMap || typeof EditorState.languageExtensionMap !== 'object') {
+                EditorState.languageExtensionMap = {};
+            }
+            EditorState.languageExtensionMap[EditorState.currentLanguage] = sanitizedValue;
+            saveToLocalStorage(STORAGE_KEYS.LANGUAGE_EXTENSION_MAP, EditorState.languageExtensionMap);
+
+            if (LANGUAGE_SHOW_HISTORY_DROPDOWN[EditorState.currentLanguage] && sanitizedValue) {
                 addToFileExtensionHistory(sanitizedValue);
             }
             updateFileExtensionPlaceholder();
@@ -707,19 +688,9 @@ export function initializeFileExtensionInput() {
         }
     });
 
-    // ---- 7. 全局 mousedown：点击输入框与下拉列表之外的区域时关闭下拉与右键菜单 ----
-    // 由于本函数带幂等保护，此监听器在整个会话中仅注册一次。
+    // ---- 10. 全局 mousedown ----
     document.addEventListener('mousedown', function(event) {
         if (!DOM.fileExtensionInput) return;
-
-        // 7.1 关闭右键菜单（若点击不在菜单内）
-        if (fileExtensionContextMenuElement &&
-            fileExtensionContextMenuElement.style.display !== 'none' &&
-            !fileExtensionContextMenuElement.contains(event.target)) {
-            hideFileExtensionContextMenu();
-        }
-
-        // 7.2 关闭下拉（若点击不在输入框包裹器内）
         const wrapperElement = document.getElementById('fileExtensionWrapper');
         if (!wrapperElement) return;
         if (!wrapperElement.contains(event.target)) {
@@ -727,13 +698,11 @@ export function initializeFileExtensionInput() {
         }
     });
 
-    // ---- 8. 全局 keydown：Escape 关闭右键菜单 ----
-    // 当焦点不在输入框时（例如点击了历史项后），仍需支持 Escape 关闭菜单。
+    // ---- 11. 全局 keydown（Escape 关闭下拉） ----
     document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') {
-            if (fileExtensionContextMenuElement &&
-                fileExtensionContextMenuElement.style.display !== 'none') {
-                hideFileExtensionContextMenu();
+            if (DOM.fileExtensionDropdown && DOM.fileExtensionDropdown.style.display !== 'none') {
+                hideFileExtensionDropdown();
             }
         }
     });
@@ -742,8 +711,7 @@ export function initializeFileExtensionInput() {
 // ==================== 目录选择辅助 ====================
 
 /**
- * v8.4.0 新增：封装 window.showDirectoryPicker 调用，自动使用上次保存的
- * 目录句柄作为 startIn 起始位置。
+ * 封装 window.showDirectoryPicker，自动使用上次保存的目录句柄作为 startIn。
  *
  * 逻辑：
  *   1. 尝试通过 loadDirectoryHandleForStartIn() 读取上次保存的目录句柄
@@ -758,11 +726,8 @@ export function initializeFileExtensionInput() {
  *   - Promise<FileSystemDirectoryHandle>：用户选择的目录句柄
  *   - 若用户取消则抛出 AbortError（与原生一致）
  *   - 若其他错误则抛出原始错误
- *
- * @param {string} pickerMode 权限模式，通常为 'readwrite'
  */
 async function showDirectoryPickerWithLastPosition(pickerMode) {
-    // ---- 1. 组装 picker 选项，尝试读取上次保存的句柄 ----
     const pickerOptions = { mode: pickerMode };
     try {
         const lastDirectoryHandle = await loadDirectoryHandleForStartIn();
@@ -772,29 +737,22 @@ async function showDirectoryPickerWithLastPosition(pickerMode) {
             pickerOptions.startIn = 'documents';
         }
     } catch (loadError) {
-        // 极端情况下（例如 IndexedDB 被禁用）读取失败，回退到 documents
         pickerOptions.startIn = 'documents';
     }
 
-    // ---- 2. 首次尝试 ----
     try {
         return await window.showDirectoryPicker(pickerOptions);
     } catch (firstError) {
-        // 用户主动取消：直接抛出，不重试
         if (firstError && firstError.name === 'AbortError') {
             throw firstError;
         }
-        // 若首次使用了句柄作为 startIn，则可能存在句柄无效的问题；
-        // 回退到 'documents' 重试一次。
         if (pickerOptions.startIn !== 'documents') {
             try {
                 return await window.showDirectoryPicker({ mode: pickerMode, startIn: 'documents' });
             } catch (secondError) {
-                // 第二次仍失败，抛出第二次的错误
                 throw secondError;
             }
         }
-        // 首次已使用 documents 作为 startIn，直接抛出原错误
         throw firstError;
     }
 }
@@ -808,19 +766,19 @@ async function handleDownloadClick() {
         return;
     }
 
-    // ---- 决定使用的文件后缀：自定义优先 ----
+    // 决定使用的文件后缀：优先使用输入框的当前值（已跟随语言）
     const languageDefaultExtension = LANGUAGE_EXTENSIONS[EditorState.currentLanguage] || 'txt';
-    const customExtension = getCustomFileExtension();
-    const fileExtension = customExtension || languageDefaultExtension;
-    // MIME 自适应：自定义后缀与语言默认后缀一致时沿用语言对应 MIME，
-    // 否则使用 text/plain，避免浏览器按错误类型处理文件。
+    let fileExtension = getCustomFileExtension();
+    if (!fileExtension) {
+        fileExtension = languageDefaultExtension;
+    }
     const mimeType = (fileExtension === languageDefaultExtension)
         ? (MIME_TYPES[EditorState.currentLanguage] || 'text/plain')
         : 'text/plain';
 
-    // 无论是否真的下载，都把当前后缀记入历史，方便下次快速选择。
-    if (customExtension) {
-        addToFileExtensionHistory(customExtension);
+    // 仅 TXT 语言把当前值作为历史写入
+    if (LANGUAGE_SHOW_HISTORY_DROPDOWN[EditorState.currentLanguage] && fileExtension) {
+        addToFileExtensionHistory(fileExtension);
     }
 
     let exportEncoding = EditorState.currentEncoding;
@@ -830,17 +788,12 @@ async function handleDownloadClick() {
         showToast('当前为自动检测，导出使用 UTF-8');
     }
 
-    // 统一走 encodeTextToBytes，内部支持 utf-8 / utf-8-bom / windows-1252。
-    // 若 exportEncoding 为已移除的编码，会安全降级为 UTF-8。
     const encodedBytes = encodeTextToBytes(currentCode, exportEncoding);
 
-    // ---- 优先使用 File System Access API ----
     if (window.showDirectoryPicker) {
         try {
-            // 尝试加载已保存的目录句柄（通过权限检查）
             let directoryHandle = await loadDirectoryHandle();
             if (!directoryHandle) {
-                // 尚未选择目录或权限已失效：使用上次保存的句柄位置作为起始
                 directoryHandle = await showDirectoryPickerWithLastPosition('readwrite');
                 await saveDirectoryHandle(directoryHandle);
             }
@@ -870,7 +823,6 @@ async function handleDownloadClick() {
         }
     }
 
-    // ---- 浏览器下载回退 ----
     const lastFilename = loadFromLocalStorage(STORAGE_KEYS.LAST_DOWNLOAD_FILENAME, 'code');
     const userInputFilename = prompt('请输入文件名（无需后缀，将自动使用 .' + fileExtension + '）:', lastFilename);
     if (userInputFilename === null) return;
@@ -891,11 +843,6 @@ async function handleDownloadClick() {
     showToast('💾 已下载 ' + finalFilename + ' (' + ENCODING_DISPLAY_NAMES[exportEncoding] + ')');
 }
 
-/**
- * v8.4.0：更改保存位置。
- * 使用上次保存的目录句柄作为 showDirectoryPicker 的 startIn，
- * 使对话框下次打开时自动定位到上次选择的目录。
- */
 async function changeSaveDirectory() {
     if (!window.showDirectoryPicker) {
         showToast('⚠️ 您的浏览器不支持目录选择，请使用传统下载', true);

@@ -3,19 +3,11 @@
  * ui.js — 主 UI 事件
  * ============================================================================
  *
- * 本模块职责：
- *   1. 主题切换 / 字体缩放 / 自动换行 / 缩进设置
- *   2. 帮助弹窗 / 大文件弹窗
- *   3. 全局快捷键（Ctrl +/-/0/F/H/G/S/T/Enter/Shift+C，Ctrl+Z/Y）
- *   4. 复制 / 清空 / 全选 / 撤销 / 重做 按钮
- *   5. 高亮状态指示器点击
- *   6. 智能 textarea 高度调整
- *   7. 页面隐藏 / 卸载时终止 Worker + 紧急保存
- *
- * v8.2.0 变更：
- *   语言下拉框的 change 事件在调用 switchLanguage 之后，
- *   额外调用 updateFileExtensionPlaceholder()，
- *   使「自定义文件后缀」输入框的占位符同步反映当前语言的默认后缀。
+ * 【v8.5.0 变更】
+ *   语言下拉框 change 事件在 switchLanguage 之后调用
+ *   updateFileExtensionForLanguage(language)，使后缀框自动跟随语言：
+ *     JS → js、HTML → html、CSS → css、PY → py、JV → java、TXT → 自由输入
+ *   前 5 语言后缀框 readOnly（HTML 除外），TXT 后缀框可编辑。
  * ============================================================================
  */
 
@@ -52,8 +44,8 @@ import { scrollToCursor, updateCursorPosition } from './line-numbers.js';
 import { toggleReplaceModal, openReplaceModal } from './search.js';
 import { runJavaCode } from './java-runner.js';
 import { historyManager } from './history.js';
-// v8.2.0：新增导入，用于在语言切换后同步自定义后缀输入框的提示
-import { updateFileExtensionPlaceholder } from './file-io.js';
+// v8.5.0：后缀随语言切换
+import { updateFileExtensionForLanguage } from './file-io.js';
 
 // ==================== 主题 ====================
 
@@ -503,12 +495,12 @@ export function setupUIEvents() {
     // 查找替换
     DOM.btnToggleReplace.addEventListener('click', toggleReplaceModal);
 
-    // 语言下拉框（v8.1.0：替代原 .lang-label 按钮循环）
-    // v8.2.0：切换语言后同步自定义后缀输入框的占位符与提示文本
+    // 语言下拉框（v8.5.0：切换后自动更新后缀框）
     if (DOM.langSelect) {
         DOM.langSelect.addEventListener('change', function() {
-            switchLanguage(this.value);
-            updateFileExtensionPlaceholder();
+            const newLanguage = this.value;
+            switchLanguage(newLanguage);
+            updateFileExtensionForLanguage(newLanguage);
         });
     }
 

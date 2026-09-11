@@ -3,20 +3,10 @@
  * state.js — 全局状态对象
  * ============================================================================
  *
- * 本模块从 v7.7.0 单文件主脚本提取 EditorState，保持字段与含义完全一致。
- * 所有跨模块共享的可变状态集中于此。
- *
- * 字段说明：
- *   - internalEditorUpdate：内部代码驱动的编辑器更新标志。
- *     当 setEditorContent 或 HistoryManager.applyState 主动派发 'input' 事件
- *     时，会临时置为 true，editor.js 的 handleEditorInput 检测到该标志后
- *     直接返回，避免 debouncedUpdate / triggerAutoSave 被重复触发导致
- *     fullUpdate 双调用。
- *     该字段为内部瞬态标志，不持久化，不参与任何 UI 展示。
- *
- * 编码精简：
- *   移除 gb18030EncodingMap / gb18030EncodingMapPromise / gb18030MapBuilding /
- *   gb18030MapWorker 四个字段（GB18030 编码及其 Worker 支持已下线）。
+ * 【v8.5.0 新增】
+ *   languageExtensionMap：每语言独立保存的后缀值。
+ *     结构：{ js: 'js', html: 'html', css: 'css', python: 'py', java: 'java', txt: '' }
+ *     切换语言时读取 / 写入，保证每语言的后缀状态独立持久化。
  * ============================================================================
  */
 
@@ -96,10 +86,11 @@ export const EditorState = {
     // ---- Java 版本 ----
     javaVersion: '21.0.2',
 
+    // ---- v8.5.0 新增：每语言独立后缀 ----
+    // 结构：{ js: 'js', html: 'html', css: 'css', python: 'py', java: 'java', txt: '' }
+    // 初始化时从 localStorage 恢复，切换语言时读写，修改后整体持久化。
+    languageExtensionMap: {},
+
     // ---- 内部编辑器更新标志 ----
-    // 由 editor-api.js 的 setEditorContent 与 history.js 的 dispatchEditorUpdate
-    // 在主动派发 'input' 事件前后置位 / 复位。editor.js 的 handleEditorInput
-    // 检测到该标志时直接返回，避免内部驱动的更新与显式 fullUpdate 叠加，
-    // 造成行号 / 高亮 / 匹配计数等刷新逻辑被双调用。
     internalEditorUpdate: false
 };

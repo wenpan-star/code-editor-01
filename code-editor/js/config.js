@@ -4,11 +4,22 @@
  * ============================================================================
  *
  * 集中管理应用常量与默认值，无 DOM 依赖、无副作用。
+ *
+ * 【v8.5.0 新增】
+ *   - LANGUAGE_DISPLAY_NAMES / LANGUAGE_EXTENSIONS / MIME_TYPES /
+ *     EXTENSION_LANGUAGE_MAP / DEFAULT_CODE_BY_LANGUAGE 增加 txt 语言
+ *   - AUTO_EXTENSION_BY_LANGUAGE：语言 → 默认后缀映射
+ *   - LANGUAGE_ALLOW_CUSTOM_EXTENSION：语言 → 是否允许用户修改后缀
+ *   - LANGUAGE_SHOW_HISTORY_DROPDOWN：语言 → 是否显示历史后缀下拉
+ *   - STORAGE_KEYS.LANGUAGE_EXTENSION_MAP：每语言后缀映射的持久化键
+ *
+ * 【v8.5.3 变更】
+ *   - APP_VERSION 更新为 '8.5.3'
  * ============================================================================
  */
 
 export const CONFIG = Object.freeze({
-    APP_VERSION: '8.4.0',
+    APP_VERSION: '8.5.3',
 
     // ---- 大文件阈值 ----
     LARGE_FILE_THRESHOLD: 300 * 1024,
@@ -29,6 +40,8 @@ export const CONFIG = Object.freeze({
     SEARCH_TIMEOUT_GRACE_MS: 100,
 
     // ---- 匹配计数防抖 ----
+    // 统一由 search.js 的 updateMatchCountDebounced 使用，
+    // fullUpdate 注入的回调也是这个防抖版本，避免被绕过。
     MATCH_COUNT_DEBOUNCE_MS: 150,
 
     // ---- Java 运行 ----
@@ -66,7 +79,9 @@ export const STORAGE_KEYS = Object.freeze({
     REPLACE_FIND_MANUAL_HEIGHT: 'replace-find-manual-height',
     REPLACE_WITH_MANUAL_HEIGHT: 'replace-with-manual-height',
     FILE_EXTENSION: 'editor-file-extension-v8',
-    FILE_EXTENSION_HISTORY: 'editor-file-extension-history-v8'
+    FILE_EXTENSION_HISTORY: 'editor-file-extension-history-v8',
+    // v8.5.0 新增：语言 → 后缀映射（对象：{ js: 'js', html: 'html', ... }）
+    LANGUAGE_EXTENSION_MAP: 'editor-language-extension-map-v9'
 });
 
 export const INDEXED_DB = Object.freeze({
@@ -88,7 +103,8 @@ export const LANGUAGE_DISPLAY_NAMES = Object.freeze({
     html: 'HTML',
     css: 'CSS',
     python: 'Python',
-    java: 'Java'
+    java: 'Java',
+    txt: 'Plain Text'
 });
 
 export const LANGUAGE_EXTENSIONS = Object.freeze({
@@ -96,7 +112,48 @@ export const LANGUAGE_EXTENSIONS = Object.freeze({
     html: 'html',
     css: 'css',
     python: 'py',
-    java: 'java'
+    java: 'java',
+    txt: 'txt'
+});
+
+/**
+ * v8.5.0 新增：语言 → 默认后缀。
+ * 用户在未自定义时使用的后缀。
+ */
+export const AUTO_EXTENSION_BY_LANGUAGE = Object.freeze({
+    js: 'js',
+    html: 'html',
+    css: 'css',
+    python: 'py',
+    java: 'java',
+    txt: ''
+});
+
+/**
+ * v8.5.0 新增：语言 → 是否允许用户修改后缀。
+ * false 表示输入框 readOnly（后缀固定跟随语言）；
+ * true 表示输入框可编辑。
+ */
+export const LANGUAGE_ALLOW_CUSTOM_EXTENSION = Object.freeze({
+    js: false,
+    html: true,
+    css: false,
+    python: false,
+    java: false,
+    txt: true
+});
+
+/**
+ * v8.5.0 新增：语言 → 是否显示历史后缀下拉。
+ * 仅 TXT 显示；前 5 语言的默认后缀不进入历史记录。
+ */
+export const LANGUAGE_SHOW_HISTORY_DROPDOWN = Object.freeze({
+    js: false,
+    html: false,
+    css: false,
+    python: false,
+    java: false,
+    txt: true
 });
 
 export const ENCODING_DISPLAY_NAMES = Object.freeze({
@@ -182,7 +239,15 @@ public class Main {
         }
         return memo[n];
     }
-}`
+}`,
+    txt: `这是一段纯文本示例。
+
+在 TXT 模式下：
+  · 无语法高亮
+  · 无 Java 运行支持
+  · 后缀可自由输入（会出现在下拉历史中）
+
+Hello, World!`
 });
 
 export const THEME_SEQUENCE = Object.freeze(['dark', 'light', 'ink', 'cream']);
@@ -199,7 +264,8 @@ export const MIME_TYPES = Object.freeze({
     css: 'text/css',
     js: 'text/javascript',
     py: 'text/x-python',
-    java: 'text/x-java-source'
+    java: 'text/x-java-source',
+    txt: 'text/plain'
 });
 
 export const EXTENSION_LANGUAGE_MAP = Object.freeze({
@@ -212,7 +278,8 @@ export const EXTENSION_LANGUAGE_MAP = Object.freeze({
     java: 'java',
     json: 'js',
     xml: 'html',
-    md: 'html'
+    md: 'html',
+    txt: 'txt'
 });
 
 export const VALID_TEXT_FILE_EXTENSION_REGEX = /\.(js|ts|jsx|html|css|py|java|txt|json|md|xml)$/i;

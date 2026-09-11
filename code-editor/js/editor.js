@@ -9,35 +9,32 @@
  *   - 智能退格（删除整级缩进）
  *   - Tab / Shift+Tab 缩进与反缩进
  *   - Ctrl+/ 注释切换
+ *   - Ctrl+↑ 跳到文档第一行（v8.5.2）
+ *   - Ctrl+Shift+↑ 扩展选区到文档开头（v8.5.3）
  *   - 粘贴（含 1.5MB / 2MB 双重限制）
  *   - 光标位置更新
  *   - 滚动同步（行号列 + Shadow DOM 高亮层）
  *
- * 本版修复：
- *   ★ setupEditorEvents 补回 #codeEditor 元素上丢失的 scroll 事件监听器。
- *     该监听器在 v8.0.0 的模块化迁移中被遗漏，导致：
- *       (1) 鼠标滚轮 / 拖动滚动条时行号列和 Shadow DOM 高亮层无法同步滚动；
- *       (2) 在长文件中滚动后输入字符，行号列会被 updateLineNumbers 重置
- *           回顶部，与编辑器内容错位。
- *     修复方式：从 highlight.js 导入 syncScroll（同时同步行号列与 Shadow
- *     DOM 高亮层），在 setupEditorEvents 中补回监听。使用 { passive: true }
- *     保证滚动事件不阻塞主线程，与 v7.7.0 一致。
+ * 【v8.5.3 变更】
+ *   1. Ctrl+↑ 分支增加 Shift 修饰键判断：
+ *      · Ctrl + ↑           → 光标移至文档第一行行首
+ *      · Ctrl + Shift + ↑   → 从当前位置扩展选区到文档开头
+ *      锚点选取：无选区时取光标位置，有选区时取远端端点（Math.max）。
+ *   2. 自动配对分支增加 TXT 短路：
+ *      TXT 为纯文本语义，用户按 ( [ { " ' ` 时不自动补全闭合符号。
+ *      直接 return，让浏览器默认行为插入用户按键字符。
  *
- *     该修复不引入循环依赖：
- *       - editor.js 已导入 line-numbers.js（用于 updateCursorPosition）
- *       - line-numbers.js 已导入 highlight.js（用于 syncShadowScroll）
- *       - highlight.js 不导入 editor.js
+ * 【v8.5.1 保留修复】
+ *   1. TXT 模式智能回车不再自动添加缩进。
+ *   2. TXT 模式 Ctrl+/ 无操作。
  *
- * 保留历史修复：
+ * 【v8.0.x 及更早保留】
+ *   - setupEditorEvents 补回 #codeEditor 上的 scroll 监听器（syncScroll）
  *   - 自动配对（选中区替换 / 插入括号）与 Tab 单光标缩进三处 setRangeText
- *     调用，用 EditorState.internalEditorUpdate 包住，抑制 handleEditorInput
- *     重复触发，并显式补上 toggleClearButton()。
- *   - 六处 setEditorContent 使用 finalCursorStart / finalCursorEnd 参数，
- *     去掉外部显式 fullUpdate。
- *   - handleEditorInput 检测 EditorState.internalEditorUpdate 标志，
- *     直接返回内部驱动的 'input' 事件。
- *   - 移除本地 debouncedUpdateMatchCount，防抖统一到 search.js 的
- *     updateMatchCountDebounced。
+ *     调用用 internalEditorUpdate 包住，抑制 handleEditorInput 重复触发
+ *   - 六处 setEditorContent 使用 finalCursorStart / finalCursorEnd 参数
+ *   - handleEditorInput 检测 internalEditorUpdate 标志直接返回
+ *   - 移除本地 debouncedUpdateMatchCount，统一到 search.js
  *
  * 依赖：
  *   - state.js / dom.js / toast.js / util.js
@@ -45,7 +42,7 @@
  *   - editor-api.js（setEditorContent / fullUpdate / triggerAutoSave /
  *     debouncedUpdate / toggleClearButton）
  *   - line-numbers.js（updateCursorPosition）
- *   - highlight.js（syncScroll）— 本版新增，无循环风险
+ *   - highlight.js（syncScroll）
  * ============================================================================
  */
 
@@ -115,6 +112,34 @@ function handleEditorKeyDown(event) {
     const selectionEnd = this.selectionEnd;
     const editorValue = this.value;
 
+    // ---- Ctrl + ↑ / Ctrl + Shift + ↑ ----
+    // · Ctrl + ↑           → 光标移至文档第一行行首
+    // · Ctrl + Shift + ↑   → 从当前位置扩展选区到文档开头
+    // v8.5.2：新增 Ctrl + ↑ 分支，覆盖浏览器默认行为（跳到段落 / 滚动一行）。
+    // v8.5.3：增加 Shift 修饰键判断，扩展选区到文档开头。
+    // 使用 event.key === 'ArrowUp' 判断：keyCode 已废弃，key 为现代标准。
+    if ((event.ctrlKey || event.metaKey) && pressedKey === 'ArrowUp') {
+        event.preventDefault();
+        if (event.shiftKey) {
+            // 扩展选区到文档开头：锚点取当前位置（无选区）或选区远端（有选区）。
+            // 使用 Math.max 取远端端点，等价于"不改变远端锚点，把活动端拉到 0"。
+            const anchorPosition = (selectionStart === selectionEnd)
+                ? selectionStart
+                : Math.max(selectionStart, selectionEnd);
+            if (anchorPosition > 0) {
+                this.setSelectionRange(0, anchorPosition);
+            }
+        } else {
+            // 跳到文档开头：光标移至 0 处。
+            this.selectionStart = this.selectionEnd = 0;
+        }
+        this.scrollTop = 0;
+        // 同步行号列与 Shadow DOM 高亮层滚动（syncScroll 由 highlight.js 导出）。
+        syncScroll();
+        updateCursorPosition();
+        return;
+    }
+
     // ---- 跳过已存在的闭合符号 ----
     if (pressedKey in closingPairs && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
         if (selectionStart === selectionEnd && editorValue[selectionStart] === pressedKey) {
@@ -127,6 +152,10 @@ function handleEditorKeyDown(event) {
 
     // ---- 自动配对 ----
     if (pressedKey in openingPairs && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+        // v8.5.3：TXT 为纯文本语义，禁用自动配对。
+        // 直接 return，让浏览器默认行为插入用户按下的字符。
+        if (EditorState.currentLanguage === 'txt') return;
+
         // 选中区被包裹分支
         if (selectionStart !== selectionEnd) {
             event.preventDefault();
@@ -181,7 +210,12 @@ function handleEditorKeyDown(event) {
         const trimmedLine = currentLine.trimEnd();
         let extraIndent = '';
 
-        if (!isInsideStringOrComment(editorValue, selectionStart)) {
+        // v8.5.1：TXT 为纯文本语义，不根据 { ( [ : 结尾自动追加缩进。
+        // 行首已有的缩进（currentIndent）仍被保留 —— 它反映用户手动输入的格式。
+        if (
+            EditorState.currentLanguage !== 'txt' &&
+            !isInsideStringOrComment(editorValue, selectionStart)
+        ) {
             if (
                 trimmedLine.endsWith('{') ||
                 trimmedLine.endsWith('(') ||
@@ -291,6 +325,9 @@ function handleCommentToggle(event) {
     if (!(event.ctrlKey || event.metaKey) || event.key !== '/') return;
     event.preventDefault();
     if (EditorState.largeFileActive) return;
+    // v8.5.1：TXT 为纯文本语义，无注释概念，Ctrl+/ 直接返回。
+    // event.preventDefault() 已调用，浏览器不会插入 '/' 字符。
+    if (EditorState.currentLanguage === 'txt') return;
 
     const selectionStart = this.selectionStart;
     const selectionEnd = this.selectionEnd;
@@ -383,7 +420,7 @@ export function setupEditorEvents() {
     DOM.codeEditor.addEventListener('keyup', updateCursorPosition);
     DOM.codeEditor.addEventListener('input', handleEditorInput);
     DOM.codeEditor.addEventListener('paste', handleEditorPaste);
-    // 本版修复：补回滚动同步监听器。
+    // 滚动同步监听器：
     // syncScroll 由 highlight.js 导出，同步行号列（lineNumbers.scrollTop）
     // 与 Shadow DOM 高亮层（highlightPreElement.scrollTop / scrollLeft）。
     // 使用 { passive: true } 保证滚动事件不阻塞主线程。

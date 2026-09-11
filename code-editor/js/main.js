@@ -16,7 +16,12 @@
  *   10. 初始化自定义文件后缀输入框
  *   11. 聚焦编辑器
  *
- * 本版仅更新启动日志版本号与描述文案，其余流程保持不变。
+ * 【v8.5.3 变更】
+ *   1. performHighlightRender 中的括号匹配增加 TXT 判断：
+ *      TXT 为纯文本语义，禁用括号高亮。
+ *   2. 启动日志版本号与描述更新为 v8.5.3。
+ *
+ * 其余流程保持不变。
  * ============================================================================
  */
 
@@ -111,6 +116,9 @@ function bindJavaVersionSelectEvent() {
  * 由 main.js 注入到 highlight.js 的调度回调。
  * 回调负责：计算搜索/括号范围、调用 buildHighlightHTML 生成 HTML、
  *           更新 Shadow DOM 高亮层。
+ *
+ * v8.5.3：括号匹配增加 TXT 判断，TXT 为纯文本语义，
+ *         不参与括号高亮（与 v8.5.3 的 TXT 自动配对禁用保持一致）。
  */
 function performHighlightRender() {
     if (EditorState.largeFileActive) {
@@ -120,23 +128,25 @@ function performHighlightRender() {
     }
 
     if (!EditorState.highlightEnabled) {
-        // 已关闭高亮：仅做 HTML 转义输出
         updateShadowHighlight(escapeHtml(DOM.codeEditor.value), EditorState.wordWrapEnabled);
         syncShadowScroll();
         return;
     }
 
     // 括号匹配（仅取光标前一个字符，若为括号则查找配对）
+    // v8.5.3：TXT 为纯文本语义，跳过括号高亮。
     const bracketRanges = [];
-    const cursorPosition = DOM.codeEditor.selectionStart;
-    if (cursorPosition > 0) {
-        const checkPosition = cursorPosition - 1;
-        if (DOM.codeEditor.value[checkPosition] && /[()\[\]{}]/.test(DOM.codeEditor.value[checkPosition])) {
-            const matchingPos = findMatchingBracket(DOM.codeEditor.value, checkPosition);
-            if (matchingPos !== -1) {
-                const rangeStart = Math.min(checkPosition, matchingPos);
-                const rangeEnd = Math.max(checkPosition, matchingPos) + 1;
-                bracketRanges.push({ start: rangeStart, end: rangeEnd });
+    if (EditorState.currentLanguage !== 'txt') {
+        const cursorPosition = DOM.codeEditor.selectionStart;
+        if (cursorPosition > 0) {
+            const checkPosition = cursorPosition - 1;
+            if (DOM.codeEditor.value[checkPosition] && /[()\[\]{}]/.test(DOM.codeEditor.value[checkPosition])) {
+                const matchingPos = findMatchingBracket(DOM.codeEditor.value, checkPosition);
+                if (matchingPos !== -1) {
+                    const rangeStart = Math.min(checkPosition, matchingPos);
+                    const rangeEnd = Math.max(checkPosition, matchingPos) + 1;
+                    bracketRanges.push({ start: rangeStart, end: rangeEnd });
+                }
             }
         }
     }
@@ -192,7 +202,6 @@ async function initialize() {
     historyManagerInstance.pushState(DOM.codeEditor);
 
     // ---- 2. 注入循环依赖回调 ----
-    // 注入防抖版本，使 fullUpdate 触发的匹配计数也走防抖。
     setUpdateMatchCountCallback(updateMatchCountDebounced);
 
     // ---- 3. 设置高亮调度器 ----
@@ -235,6 +244,14 @@ async function initialize() {
         const savedLanguage = loadFromLocalStorage(STORAGE_KEYS.LANGUAGE, 'js');
         if (savedLanguage === 'java') {
             setEditorContent(DEFAULT_CODE_BY_LANGUAGE.java, false);
+        } else if (savedLanguage === 'python') {
+            setEditorContent(DEFAULT_CODE_BY_LANGUAGE.python, false);
+        } else if (savedLanguage === 'html') {
+            setEditorContent(DEFAULT_CODE_BY_LANGUAGE.html, false);
+        } else if (savedLanguage === 'css') {
+            setEditorContent(DEFAULT_CODE_BY_LANGUAGE.css, false);
+        } else if (savedLanguage === 'txt') {
+            setEditorContent(DEFAULT_CODE_BY_LANGUAGE.txt, false);
         } else {
             setEditorContent(DEFAULT_CODE_BY_LANGUAGE.js, false);
         }
@@ -267,13 +284,9 @@ async function initialize() {
     }
     DOM.langDisplay.textContent = LANGUAGE_DISPLAY_NAMES[savedLanguage] || savedLanguage;
 
-    // 语言恢复后显式刷新高亮，不再依赖第 14 步 rAF 的异步性。
     scheduleHighlightUpdate();
 
-    // ---- 15.1 初始化自定义文件后缀输入框 ----
-    // 必须在语言恢复之后执行，使占位符正确反映当前语言的默认后缀。
-    // 同时完成：从 localStorage 恢复上次保存的后缀、绑定输入事件。
-    // 本函数带幂等保护，重复调用无副作用。
+    // ---- 15.1 初始化后缀输入框（内部调用 updateFileExtensionForLanguage） ----
     initializeFileExtensionInput();
 
     // ---- 16. 更新运行按钮状态 ----
@@ -303,7 +316,7 @@ async function initialize() {
     updateUndoRedoState();
 
     console.log(
-        '%c🚀 专业版编辑器 v' + CONFIG.APP_VERSION + ' 已就绪（工具栏重排 + 记住上次保存位置 + 右键编辑/删除历史后缀）',
+        '%c🚀 专业版编辑器 v' + CONFIG.APP_VERSION + ' 已就绪（修复智能选择监听器泄漏 + 帮助弹窗收录 Ctrl+↑ + Ctrl+Shift+↑ 语义 + TXT 模式禁用自动配对/括号高亮）',
         'color:#3fb950;font-weight:bold;'
     );
 }

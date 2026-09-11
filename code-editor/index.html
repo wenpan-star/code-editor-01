@@ -3,27 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
-    <title>在线代码编辑器 · 专业版 v8.4.0</title>
+    <title>在线代码编辑器 · 专业版 v8.5.3</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23f5a623' rx='20'/%3E%3Cpath d='M35,40 L48,50 L35,60' stroke='%232d2d2d' fill='none' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M55,65 L70,35' stroke='%232d2d2d' stroke-width='5' stroke-linecap='round'/%3E%3Cpath d='M65,40 L52,50 L65,60' stroke='%232d2d2d' fill='none' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
     <!--
     ================================================================================
-     在线代码编辑器 · 专业版 v8.4.0
+     在线代码编辑器 · 专业版 v8.5.3
 
      【本次更新说明】
-       1. 工具栏重排：撤销 / 重做之后、清空编辑器之前 → 依次为
-          「导入 / 下载 / 更改保存位置」，紧接「清空编辑器」；
-          其余按钮相对顺序保持不变。
-       2. 记住上次保存位置：更改保存位置 / 下载 时打开目录选择器，
-          自动定位到上次选择的目录（基于 IndexedDB 中已保存的目录句柄）。
-          句柄不可用时回退到默认 documents。
-       3. 后缀输入框位置调整：移至「选择编辑语言」与「选择编码格式」之间。
-       4. 合并 v8.3.2 全部修复：右键历史后缀项弹出「编辑 / 删除」菜单。
+       修复上一轮审核发现的监听器泄漏与 4 项细节：
+         1. search.js setupSmartSelect 监听器泄漏（bind 引用不一致，无法移除）。
+         2. 帮助弹窗新增 Ctrl+↑ 快捷键说明。
+         3. Ctrl+Shift+↑ 语义区分：扩展选区到文档开头。
+         4. TXT 模式禁用自动配对与括号高亮。
+         5. 版本号统一为 v8.5.3。
 
-     【保留特性】
-       - 历史后缀下拉：字母排序 / 去重 / 上限 20 条 / 小写统一
-       - 输入时按值过滤显示历史下拉
-       - Escape 语义修正（取消编辑时不写入历史）
-       - initializeFileExtensionInput 幂等保护
+     【保留特性（v8.5.0）】
+       - 语言切换自动跟随后缀：
+         JS → js / HTML → html / CSS → css / PY → py / JV → java / TXT → 空
+       - 前 5 语言后缀只读（HTML 除外）
+       - 新增 TXT 语言（纯文本模式）
+       - 历史下拉仅 TXT 显示
+       - 每语言独立保存后缀
+       - 移除右键菜单，改用下拉项右侧 × 删除按钮
+       - 旧数据兼容：v8.4.1 单一值迁移为 TXT 初始后缀
+
+     【保留特性（v8.4.x 及更早）】
+       - 工具栏：撤销 / 重做 → 导入 / 下载 / 更改保存位置 → 清空 / 全选 / 换行 / 查找替换 → 运行 / 复制
+       - 后缀输入框位于「语言」与「编码」之间
+       - 更改保存位置 / 下载 自动定位到上次使用的目录
        - Dark / Light / Ink / Cream 四主题
        - 5 语言语法高亮 + Shadow DOM 高亮层 + 代码折叠
        - 查找替换（Web Worker 超时终止重建 / 正则安全检测）
@@ -45,7 +52,7 @@
                 <span class="file-name" id="fileNameDisplay">在线代码编辑器 <span class="modified-dot" id="modifiedDot" title="未保存的更改"></span></span>
             </div>
             <div class="toolbar-right">
-                <!-- 语言选择 -->
+                <!-- 语言选择（新增 TXT 选项） -->
                 <div class="language-select-wrapper" title="选择编程语言">
                     <select id="languageSelect" class="language-select" aria-label="编程语言">
                         <option value="js">JS</option>
@@ -53,12 +60,13 @@
                         <option value="css">CSS</option>
                         <option value="python">PY</option>
                         <option value="java">JV</option>
+                        <option value="txt">TXT</option>
                     </select>
                     <span class="language-select-arrow">▼</span>
                 </div>
-                <!-- 自定义文件后缀输入框（移至语言与编码之间） -->
-                <div class="file-extension-input-wrapper" id="fileExtensionWrapper" title="自定义保存文件后缀（留空则按当前语言自动推断）">
-                    <input type="text" id="fileExtensionInput" class="file-extension-input" placeholder="后缀" aria-label="自定义文件后缀" maxlength="12" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-haspopup="listbox" aria-expanded="false">
+                <!-- 自定义文件后缀输入框（位于语言与编码之间） -->
+                <div class="file-extension-input-wrapper" id="fileExtensionWrapper" title="保存文件后缀（随语言自动跟随）">
+                    <input type="text" id="fileExtensionInput" class="file-extension-input" placeholder="后缀" aria-label="文件后缀" maxlength="12" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-haspopup="listbox" aria-expanded="false">
                     <div class="file-extension-dropdown" id="fileExtensionDropdown" role="listbox" aria-label="历史文件后缀" style="display:none;"></div>
                 </div>
                 <!-- 编码选择 -->
@@ -89,11 +97,11 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/></svg>
                 </button>
                 <div class="toolbar-divider"></div>
-                <!-- 导入 / 下载 / 更改保存位置（撤销/重做后、清空前） -->
+                <!-- 导入 / 下载 / 更改保存位置 -->
                 <button class="btn btn-ghost" id="btnImport" title="导入文件"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
                 <button class="btn btn-ghost" id="btnDownload" title="下载文件"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
                 <button class="btn btn-ghost" id="btnChangeSaveDir" title="更改保存位置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 11 15 14"/></svg></button>
-                <!-- 清空编辑器（移到这里，位于导入/下载/更改保存目录之后） -->
+                <!-- 清空编辑器 -->
                 <button class="btn btn-ghost" id="btnClear" title="清空编辑器" aria-label="清空代码">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14"/></svg>
                 </button>
@@ -209,6 +217,8 @@
             <div class="shortcut-row"><span>查找</span><kbd>Ctrl+F</kbd></div>
             <div class="shortcut-row"><span>替换</span><kbd>Ctrl+H</kbd></div>
             <div class="shortcut-row"><span>跳转到行</span><kbd>Ctrl+G</kbd></div>
+            <div class="shortcut-row"><span>跳到第一行</span><kbd>Ctrl+↑</kbd></div>
+            <div class="shortcut-row"><span>选到文档开头</span><kbd>Ctrl+Shift+↑</kbd></div>
             <div class="shortcut-row"><span>注释</span><kbd>Ctrl+/</kbd></div>
             <div class="shortcut-row"><span>保存</span><kbd>Ctrl+S</kbd></div>
             <div class="shortcut-row"><span>运行 Java</span><kbd>Ctrl+Enter</kbd></div>

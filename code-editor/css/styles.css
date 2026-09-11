@@ -1,14 +1,21 @@
 /* ============================================================================
- * styles.css — 在线代码编辑器 · 专业版 v8.5.7
+ * styles.css — 在线代码编辑器 · 专业版 v8.6.0
  * ============================================================================
  *
  * 【本次更新说明】
- *   1. 新增 .btn-download 样式（绿色系）：
- *      - 默认态：淡绿背景 + 绿色文字 + 绿色边框，与 ghost 按钮明确区分。
- *      - Hover 态：实心绿色 + 白色文字 + 阴影焦点环。
- *      - Active 态：轻微下沉。
- *      - 使用四主题共享的 --green / --green-bg 变量，自动适配所有主题。
+ *   1. 新增 .settings-io-wrapper / .settings-io-dropdown / .settings-io-item
+ *      样式（设置导出 / 导入按钮 + 下拉菜单）：
+ *      - 齿轮按钮位于主题 ☀️ 与帮助 ? 之间，沿用 .btn-ghost 视觉。
+ *      - 下拉菜单右对齐展开，使用 --surface / --border-strong / --shadow
+ *        与已有 file-extension-dropdown 保持一致的视觉语言。
+ *      - 菜单项 hover / focus 使用 --accent-subtle + --accent，
+ *        与文件后缀下拉保持一致。
+ *      - 键盘导航焦点样式与 hover 视觉一致，避免额外视觉噪音。
+ *      - 移动端（≤640px）收窄宽度与内边距。
  *   2. 其余样式内容不变。
+ *
+ * 【保留（v8.5.7）】
+ *   - .btn-download 绿色系下载按钮（默认淡绿 / hover 实心绿）。
  * ============================================================================ */
 
 
@@ -506,6 +513,70 @@ body {
     height: 24px;
     padding: 0 8px;
     font-size: var(--font-xs);
+}
+
+
+/* ---- v8.6.0 新增：设置导出 / 导入按钮 + 下拉菜单 ---- */
+/* 齿轮按钮位于主题 ☀️ 与帮助 ? 之间。
+   下拉菜单右对齐展开，视觉语言与 .file-extension-dropdown 一致。
+   菜单项 hover / focus 使用 --accent-subtle + --accent，
+   键盘导航焦点样式与 hover 视觉一致，避免额外视觉噪音。 */
+.settings-io-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.settings-io-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 180px;
+    padding: 4px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+    z-index: 900;
+    pointer-events: auto;
+}
+
+.settings-io-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-family: inherit;
+    font-size: var(--font-sm);
+    font-weight: 500;
+    color: var(--text);
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    outline: none;
+    transition:
+        background var(--transition),
+        color var(--transition);
+}
+
+.settings-io-item svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.settings-io-item:hover {
+    background: var(--accent-subtle);
+    color: var(--accent);
+}
+
+.settings-io-item:focus,
+.settings-io-item:focus-visible {
+    outline: none;
+    background: var(--accent-subtle);
+    color: var(--accent);
 }
 
 
@@ -1511,5 +1582,17 @@ body {
         height: auto;
         padding: 6px 12px;
         gap: 10px;
+    }
+    /* v8.6.0：设置下拉在移动端收窄 */
+    .settings-io-dropdown {
+        min-width: 160px;
+    }
+    .settings-io-item {
+        padding: 7px 10px;
+        font-size: var(--font-xs);
+    }
+    .settings-io-item svg {
+        width: 12px;
+        height: 12px;
     }
 }

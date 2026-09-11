@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ============================================================================
  * main.js — 启动引导 + 初始化
  * ============================================================================
@@ -12,24 +12,15 @@
  *   6. 创建搜索 Worker（用于查找替换）
  *   7. 绑定所有事件
  *   8. 注入循环依赖回调（updateMatchCountDebounced）
- *   9. 注入后缀联动回调（updateFileExtensionForLanguage，v8.5.5 新增）
+ *   9. 注入后缀联动回调（updateFileExtensionForLanguage）
  *   10. 设置高亮调度器
  *   11. 初始化自定义文件后缀输入框
- *   12. 聚焦编辑器
+ *   12. 初始化设置导出 / 导入模块
+ *   13. 聚焦编辑器
  *
- * 【v8.5.6 变更】
- *   清理第 15 步之后的误导性注释（描述"通过 switchLanguage 同步语言与后缀"，
- *   但该步骤实际无代码执行）。恢复语言的逻辑已由第 15 步的直接赋值完成，
- *   后缀同步由 initializeFileExtensionInput() 内部保证。
- *
- * 【v8.5.5 保留】
- *   1. 注入后缀联动回调：将 file-io.js 的 updateFileExtensionForLanguage
- *      注入到 editor-api.js，使 switchLanguage 成为"切换语言"的唯一原子操作。
- *   2. 启动日志版本号与描述更新为 v8.5.5。
- *
- * 【v8.5.3 保留】
- *   performHighlightRender 中的括号匹配增加 TXT 判断：
- *   TXT 为纯文本语义，禁用括号高亮。
+ * 【v8.6.0 更新】
+ *   - 新增初始化设置导出 / 导入模块（setupSettingsIOEvents）
+ *   - APP_VERSION 更新为 '8.6.0'
  * ============================================================================
  */
 
@@ -88,7 +79,6 @@ import {
     bindDragAndDropEvents,
     bindDownloadEvents,
     initializeFileExtensionInput,
-    // v8.5.5：导入后缀联动回调，注入到 editor-api.js 的 switchLanguage
     updateFileExtensionForLanguage
 } from './file-io.js';
 import {
@@ -104,6 +94,8 @@ import {
     loadIndentSetting,
     updateIndentIndicator
 } from './ui.js';
+// v8.6.0 新增：设置导出 / 导入模块
+import { setupSettingsIOEvents } from './settings-io.js';
 
 // ==================== Java 版本初始化 ====================
 
@@ -129,7 +121,7 @@ function bindJavaVersionSelectEvent() {
  *           更新 Shadow DOM 高亮层。
  *
  * v8.5.3：括号匹配增加 TXT 判断，TXT 为纯文本语义，
- *         不参与括号高亮（与 v8.5.3 的 TXT 自动配对禁用保持一致）。
+ *         不参与括号高亮。
  */
 function performHighlightRender() {
     if (EditorState.largeFileActive) {
@@ -144,8 +136,6 @@ function performHighlightRender() {
         return;
     }
 
-    // 括号匹配（仅取光标前一个字符，若为括号则查找配对）
-    // v8.5.3：TXT 为纯文本语义，跳过括号高亮。
     const bracketRanges = [];
     if (EditorState.currentLanguage !== 'txt') {
         const cursorPosition = DOM.codeEditor.selectionStart;
@@ -215,10 +205,7 @@ async function initialize() {
     // ---- 2. 注入循环依赖回调（匹配计数防抖） ----
     setUpdateMatchCountCallback(updateMatchCountDebounced);
 
-    // ---- 2.1 注入后缀联动回调（v8.5.5 新增） ----
-    // 使 editor-api.js 的 switchLanguage 内部自动调用
-    // updateFileExtensionForLanguage，任何调用 switchLanguage 的路径
-    // （ui.js 语言下拉、file-io.js 导入文件）都会自动同步后缀框。
+    // ---- 2.1 注入后缀联动回调 ----
     setUpdateFileExtensionCallback(updateFileExtensionForLanguage);
 
     // ---- 3. 设置高亮调度器 ----
@@ -304,10 +291,6 @@ async function initialize() {
     scheduleHighlightUpdate();
 
     // ---- 15.1 初始化后缀输入框 ----
-    // 必须在使用 switchLanguage 之前完成，因为 updateFileExtensionCallback
-    // 内部会读取 / 写入 DOM.fileExtensionInput 与 languageExtensionMap。
-    // 本函数内部调用 updateFileExtensionForLanguage(EditorState.currentLanguage)，
-    // 保证启动时后缀框与恢复的语言一致，无需额外调用。
     initializeFileExtensionInput();
 
     // ---- 16. 更新运行按钮状态 ----
@@ -331,13 +314,15 @@ async function initialize() {
     bindRunButton();
     bindJavaVersionSelectEvent();
     setupUIEvents();
+    // v8.6.0 新增：设置导出 / 导入
+    setupSettingsIOEvents();
 
     // ---- 19. 聚焦编辑器 ----
     DOM.codeEditor.focus();
     updateUndoRedoState();
 
     console.log(
-        '%c🚀 专业版编辑器 v' + CONFIG.APP_VERSION + ' 已就绪（导入后缀自动跟随语言 + HTML 支持历史下拉 + HTML 伪历史修复 + 代码清理）',
+        '%c🚀 专业版编辑器 v' + CONFIG.APP_VERSION + ' 已就绪（新增设置导出/导入）',
         'color:#3fb950;font-weight:bold;'
     );
 }

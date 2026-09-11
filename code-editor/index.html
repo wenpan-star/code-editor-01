@@ -3,47 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
-    <title>在线代码编辑器 · 专业版 v8.5.7</title>
+    <title>在线代码编辑器 · 专业版 v8.6.1</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23f5a623' rx='20'/%3E%3Cpath d='M35,40 L48,50 L35,60' stroke='%232d2d2d' fill='none' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M55,65 L70,35' stroke='%232d2d2d' stroke-width='5' stroke-linecap='round'/%3E%3Cpath d='M65,40 L52,50 L65,60' stroke='%232d2d2d' fill='none' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
     <!--
     ================================================================================
-     在线代码编辑器 · 专业版 v8.5.7
+     在线代码编辑器 · 专业版 v8.6.1
 
      【本次更新说明】
-       下载按钮视觉强化：
-         - 新增 .btn-download 专用样式（绿色系）。
-         - 默认态：淡绿背景 + 绿色文字 + 绿色边框。
-         - Hover 态：实心绿色 + 白色文字 + 阴影焦点环。
-         - 与现有蓝色复制、橙色运行形成明确的色彩区分。
-         - 四主题下自动适配。
+       修复导入设置后 location.reload() 触发 beforeunload 二次确认的问题：
+         - state.js 新增 skipBeforeUnload 标志。
+         - settings-io.js 导入成功后置位该标志。
+         - ui.js beforeunload 处理器检测该标志后直接放行。
+       帮助弹窗补录"设置导出 / 导入"入口提示。
 
-     【保留特性（v8.5.6 / v8.5.5）】
-       - 导入文件后后缀框自动跟随检测到的语言（v8.5.5）
-       - HTML 后缀框支持历史下拉（v8.5.5）
-       - HTML 默认值 'html' 不误加入历史（v8.5.5）
-       - main.js 第 15.2 步误导性注释清理（v8.5.6）
-       - file-io.js suppressNextBlurHistory 死代码清理（v8.5.6）
+     【保留特性（v8.6.0）】
+       - 设置导出 / 导入：
+           · 工具栏末尾（主题 ☀️ 与帮助 ? 之间）的 ⚙️ 齿轮按钮。
+           · 一键导出全部设置为 JSON；一键从 JSON 恢复全部设置。
+           · 覆盖范围：主题、字体、缩进、语言、编码、Java 版本、自动换行、
+             高亮开关、折叠状态、查找替换弹窗位置/尺寸/输入内容、每语言
+             后缀映射、历史后缀、stdin 缓存、下载文件名默认值等。
+           · 导入前弹覆盖确认 + 未保存代码提醒；导入后自动刷新。
+           · 键盘可访问：↓/Enter/Space 打开，↑↓ 移动，Enter/Space 触发，
+             Escape/Tab 关闭。
 
-     【保留特性（v8.5.3 / v8.5.4）】
-       - setupSmartSelect 监听器泄漏修复（v8.5.3）
-       - 帮助弹窗收录 Ctrl+↑ / Ctrl+Shift+↑（v8.5.3）
-       - Ctrl+Shift+↑ 语义：扩展选区到文档开头（v8.5.3）
-       - TXT 模式禁用自动配对 / 括号高亮（v8.5.3）
-       - 空字符串旧 FILE_EXTENSION 键清理（v8.5.4）
-
-     【保留特性（v8.5.0）】
-       - 语言切换自动跟随后缀：
-         JS → js / HTML → html / CSS → css / PY → py / JV → java / TXT → 空
-       - 前 5 语言后缀只读（HTML 除外）
-       - 新增 TXT 语言（纯文本模式）
-       - 每语言独立保存后缀
-       - 移除右键菜单，改用下拉项右侧 × 删除按钮
-       - 旧数据兼容：v8.4.1 单一值迁移为 TXT 初始后缀
+     【保留特性（v8.5.x）】
+       - 导入文件后后缀自动跟随检测到的语言
+       - HTML 后缀框支持历史下拉
+       - Ctrl+↑ / Ctrl+Shift+↑ 快捷键
+       - TXT 模式禁用自动配对 / 括号高亮
 
      【保留特性（v8.4.x 及更早）】
-       - 工具栏：撤销 / 重做 → 导入 / 下载 / 更改保存位置 → 清空 / 全选 / 换行 / 查找替换 → 运行 / 复制
+       - 工具栏：撤销 / 重做 → 导入 / 下载 / 更改保存位置 → 清空 / 全选 /
+         换行 / 查找替换 → 运行 / 复制
        - 后缀输入框位于「语言」与「编码」之间
-       - 更改保存位置 / 下载 自动定位到上次使用的目录
+       - 更改保存位置 / 下载自动定位到上次使用的目录
        - Dark / Light / Ink / Cream 四主题
        - 5 语言语法高亮 + Shadow DOM 高亮层 + 代码折叠
        - 查找替换（Web Worker 超时终止重建 / 正则安全检测）
@@ -65,7 +59,7 @@
                 <span class="file-name" id="fileNameDisplay">在线代码编辑器 <span class="modified-dot" id="modifiedDot" title="未保存的更改"></span></span>
             </div>
             <div class="toolbar-right">
-                <!-- 语言选择（新增 TXT 选项） -->
+                <!-- 语言选择 -->
                 <div class="language-select-wrapper" title="选择编程语言">
                     <select id="languageSelect" class="language-select" aria-label="编程语言">
                         <option value="js">JS</option>
@@ -77,7 +71,7 @@
                     </select>
                     <span class="language-select-arrow">▼</span>
                 </div>
-                <!-- 自定义文件后缀输入框（位于语言与编码之间） -->
+                <!-- 自定义文件后缀输入框 -->
                 <div class="file-extension-input-wrapper" id="fileExtensionWrapper" title="保存文件后缀（随语言自动跟随）">
                     <input type="text" id="fileExtensionInput" class="file-extension-input" placeholder="后缀" aria-label="文件后缀" maxlength="12" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-haspopup="listbox" aria-expanded="false">
                     <div class="file-extension-dropdown" id="fileExtensionDropdown" role="listbox" aria-label="历史文件后缀" style="display:none;"></div>
@@ -139,8 +133,21 @@
                     <span id="copyText">复制</span>
                 </button>
                 <div class="toolbar-divider"></div>
-                <!-- 主题 / 帮助 -->
+                <!-- 主题 / 设置导出导入 / 帮助 -->
                 <button class="btn btn-ghost" id="btnTheme" title="切换主题">☀️</button>
+                <div class="settings-io-wrapper" id="settingsIOWrapper">
+                    <button class="btn btn-ghost" id="btnSettingsIO" title="导出 / 导入所有设置" aria-haspopup="menu" aria-expanded="false">⚙️</button>
+                    <div class="settings-io-dropdown" id="settingsIODropdown" role="menu" aria-label="设置导出/导入菜单" style="display:none;">
+                        <div class="settings-io-item" data-action="export" role="menuitem" tabindex="-1">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            <span>导出全部设置</span>
+                        </div>
+                        <div class="settings-io-item" data-action="import" role="menuitem" tabindex="-1">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            <span>导入设置文件</span>
+                        </div>
+                    </div>
+                </div>
                 <button class="btn btn-ghost" id="btnHelp" title="快捷键">?</button>
             </div>
         </div>
@@ -239,6 +246,7 @@
             <div class="shortcut-row"><span>缩小字体</span><kbd>Ctrl+ -</kbd></div>
             <div class="shortcut-row"><span>重置字体</span><kbd>Ctrl+0</kbd></div>
             <div class="shortcut-row"><span>切换主题</span><kbd>Ctrl+T</kbd></div>
+            <div class="shortcut-row"><span>设置导出/导入</span><kbd>⚙️ 按钮</kbd></div>
             <button class="btn btn-primary close-btn" id="btnCloseHelp">关闭</button>
         </div>
     </div>
@@ -256,6 +264,7 @@
     </div>
 
     <input type="file" id="fileInput" accept=".js,.ts,.jsx,.html,.css,.py,.java,.txt,.json,.md,.xml" style="display:none">
+    <input type="file" id="settingsFileInput" accept=".json,application/json,text/plain" style="display:none">
 
     <script type="module" src="js/main.js"></script>
 </body>

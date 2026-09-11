@@ -5,25 +5,19 @@
  *
  * 集中管理应用常量与默认值，无 DOM 依赖、无副作用。
  *
- * 【v8.5.7 变更】
- *   - APP_VERSION 更新为 '8.5.7'
+ * 【v8.6.1 更新】
+ *   - APP_VERSION 更新为 '8.6.1'（此前误留为 '8.6.0'，导致控制台
+ *     启动日志与实际版本号不符，且导出设置文件的 _meta.appVersion
+ *     写入错误版本号）
  *
- * 【v8.5.5 保留】
- *   - LANGUAGE_SHOW_HISTORY_DROPDOWN.html 为 true：
- *     HTML 后缀框支持历史下拉（与 TXT 一致）。
- *
- * 【v8.5.0 保留】
- *   - LANGUAGE_DISPLAY_NAMES / LANGUAGE_EXTENSIONS / MIME_TYPES /
- *     EXTENSION_LANGUAGE_MAP / DEFAULT_CODE_BY_LANGUAGE 增加 txt 语言
- *   - AUTO_EXTENSION_BY_LANGUAGE：语言 → 默认后缀映射
- *   - LANGUAGE_ALLOW_CUSTOM_EXTENSION：语言 → 是否允许用户修改后缀
- *   - LANGUAGE_SHOW_HISTORY_DROPDOWN：语言 → 是否显示历史后缀下拉
- *   - STORAGE_KEYS.LANGUAGE_EXTENSION_MAP：每语言后缀映射的持久化键
+ * 【v8.6.0 更新】
+ *   - 新增 SETTINGS_EXPORTABLE_KEYS：设置导出 / 导入的键全集，
+ *     与 STORAGE_KEYS 相邻维护，避免将来新增键时漏导出
  * ============================================================================
  */
 
 export const CONFIG = Object.freeze({
-    APP_VERSION: '8.5.7',
+    APP_VERSION: '8.6.1',
 
     // ---- 大文件阈值 ----
     LARGE_FILE_THRESHOLD: 300 * 1024,
@@ -44,8 +38,6 @@ export const CONFIG = Object.freeze({
     SEARCH_TIMEOUT_GRACE_MS: 100,
 
     // ---- 匹配计数防抖 ----
-    // 统一由 search.js 的 updateMatchCountDebounced 使用，
-    // fullUpdate 注入的回调也是这个防抖版本，避免被绕过。
     MATCH_COUNT_DEBOUNCE_MS: 150,
 
     // ---- Java 运行 ----
@@ -56,7 +48,11 @@ export const CONFIG = Object.freeze({
 
     // ---- 自定义文件后缀 ----
     FILE_EXTENSION_MAX_LENGTH: 12,
-    FILE_EXTENSION_HISTORY_MAX: 20
+    FILE_EXTENSION_HISTORY_MAX: 20,
+
+    // ---- 设置导出 / 导入 ----
+    SETTINGS_FILE_MAX_SIZE: 5 * 1024 * 1024,
+    SETTINGS_RELOAD_DELAY_MS: 1500
 });
 
 export const STORAGE_KEYS = Object.freeze({
@@ -86,6 +82,43 @@ export const STORAGE_KEYS = Object.freeze({
     FILE_EXTENSION_HISTORY: 'editor-file-extension-history-v8',
     LANGUAGE_EXTENSION_MAP: 'editor-language-extension-map-v9'
 });
+
+/**
+ * v8.6.0 新增：设置导出 / 导入的键全集。
+ *
+ * 有意排除的键（不属于"设置"，不应被导出或覆盖）：
+ *   · CODE_CACHE     —— 编辑器代码内容，由自动保存机制独立管理
+ *   · DIRTY_FLAG     —— 运行时脏标记，页面重启后即清
+ *   · FILE_EXTENSION —— v8.4.1 历史遗留键，仅在初始化时迁移后清理
+ *
+ * 新增持久化键时，请同步追加到本列表，并在 settings-io.js 的
+ * SETTINGS_VALUE_VALIDATORS 中补充相应校验规则（未定义校验的键
+ * 宽松放行，但显式校验更安全）。
+ */
+export const SETTINGS_EXPORTABLE_KEYS = Object.freeze([
+    STORAGE_KEYS.THEME,
+    STORAGE_KEYS.INDENT,
+    STORAGE_KEYS.FONT_SIZE,
+    STORAGE_KEYS.LANGUAGE,
+    STORAGE_KEYS.WRAP_ENABLED,
+    STORAGE_KEYS.HIGHLIGHT_ENABLED,
+    STORAGE_KEYS.ENCODING,
+    STORAGE_KEYS.JAVA_VERSION,
+    STORAGE_KEYS.FOLDED_RANGES,
+    STORAGE_KEYS.STDIN_CACHE,
+    STORAGE_KEYS.REPLACE_FIND,
+    STORAGE_KEYS.REPLACE_WITH,
+    STORAGE_KEYS.REPLACE_CASE_SENSITIVE,
+    STORAGE_KEYS.REPLACE_WHOLE_WORD,
+    STORAGE_KEYS.REPLACE_USE_REGEX,
+    STORAGE_KEYS.REPLACE_MODAL_POSITION,
+    STORAGE_KEYS.REPLACE_MODAL_SIZE,
+    STORAGE_KEYS.REPLACE_FIND_MANUAL_HEIGHT,
+    STORAGE_KEYS.REPLACE_WITH_MANUAL_HEIGHT,
+    STORAGE_KEYS.LAST_DOWNLOAD_FILENAME,
+    STORAGE_KEYS.FILE_EXTENSION_HISTORY,
+    STORAGE_KEYS.LANGUAGE_EXTENSION_MAP
+]);
 
 export const INDEXED_DB = Object.freeze({
     NAME: 'editor-autosave-db',
@@ -119,10 +152,6 @@ export const LANGUAGE_EXTENSIONS = Object.freeze({
     txt: 'txt'
 });
 
-/**
- * v8.5.0 新增：语言 → 默认后缀。
- * 用户在未自定义时使用的后缀。
- */
 export const AUTO_EXTENSION_BY_LANGUAGE = Object.freeze({
     js: 'js',
     html: 'html',
@@ -132,11 +161,6 @@ export const AUTO_EXTENSION_BY_LANGUAGE = Object.freeze({
     txt: ''
 });
 
-/**
- * v8.5.0 新增：语言 → 是否允许用户修改后缀。
- * false 表示输入框 readOnly（后缀固定跟随语言）；
- * true 表示输入框可编辑。
- */
 export const LANGUAGE_ALLOW_CUSTOM_EXTENSION = Object.freeze({
     js: false,
     html: true,
@@ -146,11 +170,6 @@ export const LANGUAGE_ALLOW_CUSTOM_EXTENSION = Object.freeze({
     txt: true
 });
 
-/**
- * v8.5.0 新增：语言 → 是否显示历史后缀下拉。
- * v8.5.5 变更：html 由 false 改为 true —— HTML 后缀框现支持历史下拉，
- *              与 TXT 一致（聚焦 / 点击显示历史，输入新后缀进入历史）。
- */
 export const LANGUAGE_SHOW_HISTORY_DROPDOWN = Object.freeze({
     js: false,
     html: true,

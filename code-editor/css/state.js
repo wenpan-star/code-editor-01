@@ -10,8 +10,6 @@
  *
  * 【v8.5.0 新增】
  *   languageExtensionMap：每语言独立保存的后缀值。
- *     结构：{ js: 'js', html: 'html', css: 'css', python: 'py', java: 'java', txt: '' }
- *     切换语言时读取 / 写入，保证每语言的后缀状态独立持久化。
  * ============================================================================
  */
 
@@ -104,6 +102,5 @@ export const EditorState = {
     // 若 location.reload() 再次被 beforeunload 拦截，会造成二次确认困扰。
     // settings-io.js 在写入成功后置位，ui.js 的 beforeunload 处理器
     // 检测到该标志后直接放行，不触发 event.preventDefault。
-    // 该标志不持久化，页面刷新后自动重置为 false。
     skipBeforeUnload: false
 };

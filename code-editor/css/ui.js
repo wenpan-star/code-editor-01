@@ -22,11 +22,6 @@
  *   switchLanguage 内部通过注入的回调（setUpdateFileExtensionCallback）
  *   自动触发后缀联动，不再需要在此显式调用 updateFileExtensionForLanguage。
  *   这也移除 ui.js 对 file-io.js 的导入依赖，降低模块耦合度。
- *
- * 【v8.5.0 变更】
- *   语言下拉框 change 事件在 switchLanguage 之后额外调用
- *   updateFileExtensionForLanguage，使后缀框自动跟随语言。
- *   （v8.5.5 已将此逻辑上移到 switchLanguage，此处不再需要）
  * ============================================================================
  */
 

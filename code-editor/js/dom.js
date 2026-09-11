@@ -7,12 +7,14 @@
  * index.html 中 `<script type="module">` 默认延迟执行，
  * 因此本模块执行时 DOM 已完全可用。
  *
- * v8.3.0 新增：
- *   DOM.fileExtensionDropdown：后缀输入框下方的历史下拉列表容器。
- *     若运行的是旧版 index.html（无此元素），此处取值为 null，
- *     相关模块使用处已做好空值防御。
- *
- * 依赖：index.html 中元素的 id 必须与此处保持一致。
+ * 【v8.6.0 更新】
+ *   新增设置导出 / 导入相关的 4 个引用：
+ *     · btnSettingsIO        齿轮按钮
+ *     · settingsIOWrapper    按钮 + 下拉菜单的外层容器
+ *     · settingsIODropdown   下拉菜单容器
+ *     · settingsFileInput    隐藏的 <input type="file">
+ *   若运行的是旧版 index.html（无这些元素），此处取值为 null，
+ *   settings-io.js 内部已对空值做防御处理。
  * ============================================================================
  */
 
@@ -45,6 +47,12 @@ export const DOM = {
     btnWrap: getById('btnWrap'),
     btnRun: getById('btnRun'),
 
+    // ---- v8.6.0 新增：设置导出 / 导入 ----
+    btnSettingsIO: getById('btnSettingsIO'),
+    settingsIOWrapper: getById('settingsIOWrapper'),
+    settingsIODropdown: getById('settingsIODropdown'),
+    settingsFileInput: getById('settingsFileInput'),
+
     // ---- 复制按钮图标 ----
     copyIcon: getById('copyIcon'),
     checkIcon: getById('checkIcon'),
@@ -71,7 +79,6 @@ export const DOM = {
 
     // ---- 自定义文件后缀输入框及历史下拉列表 ----
     fileExtensionInput: getById('fileExtensionInput'),
-    // v8.3.0 新增：历史下拉列表容器
     fileExtensionDropdown: getById('fileExtensionDropdown'),
 
     // ---- 查找替换弹窗 ----
